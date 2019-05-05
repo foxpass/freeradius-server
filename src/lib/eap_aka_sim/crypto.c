@@ -15,7 +15,7 @@
  */
 
 /**
- * @file src/lib/sim/crypto.c
+ * @file src/lib/aka-sim/crypto.c
  * @brief Calculate keys from GSM vectors.
  *
  * The development of the original EAP/SIM support was funded by Internet Foundation
@@ -33,7 +33,7 @@ RCSID("$Id$")
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <freeradius-devel/protocol/eap/sim/dictionary.h>
+#include <freeradius-devel/protocol/eap/aka-sim/dictionary.h>
 
 #include <freeradius-devel/eap/types.h>
 #include "base.h"
@@ -50,7 +50,7 @@ RCSID("$Id$")
  * @param[in] checkcode to free.
  * @return 0
  */
-static int _fr_sim_crypto_free_checkcode(fr_sim_checkcode_t *checkcode)
+static int _fr_aka_sim_crypto_free_checkcode(fr_aka_sim_checkcode_t *checkcode)
 {
 	if (checkcode->md_ctx) EVP_MD_CTX_destroy(checkcode->md_ctx);
 	return 0;
@@ -66,9 +66,9 @@ static int _fr_sim_crypto_free_checkcode(fr_sim_checkcode_t *checkcode)
  *	- 0 on success.
  *	- -1 on failure.
  */
-int fr_sim_crypto_init_checkcode(TALLOC_CTX *ctx, fr_sim_checkcode_t **checkcode, EVP_MD const *md)
+int fr_aka_sim_crypto_init_checkcode(TALLOC_CTX *ctx, fr_aka_sim_checkcode_t **checkcode, EVP_MD const *md)
 {
-	*checkcode = talloc_zero(ctx, fr_sim_checkcode_t);
+	*checkcode = talloc_zero(ctx, fr_aka_sim_checkcode_t);
 	if (!*checkcode) {
 		fr_strerror_printf("Out of memory");
 		return -1;
@@ -86,14 +86,14 @@ int fr_sim_crypto_init_checkcode(TALLOC_CTX *ctx, fr_sim_checkcode_t **checkcode
 		goto error;
 	}
 
-	talloc_set_destructor(*checkcode, _fr_sim_crypto_free_checkcode);
+	talloc_set_destructor(*checkcode, _fr_aka_sim_crypto_free_checkcode);
 
 	return 0;
 }
 
 /** Digest a packet, updating the checkcode
  *
- * Call #fr_sim_crypto_finalise_checkcode to obtain the final checkcode value.
+ * Call #fr_aka_sim_crypto_finalise_checkcode to obtain the final checkcode value.
  *
  * @param[in,out] checkcode	if *checkcode is NULL, a new checkcode structure
  *				will be allocated and the message digest context
@@ -104,7 +104,7 @@ int fr_sim_crypto_init_checkcode(TALLOC_CTX *ctx, fr_sim_checkcode_t **checkcode
  *	- 0 on success.
  *	- -1 on failure.
  */
-int fr_sim_crypto_update_checkcode(fr_sim_checkcode_t *checkcode, eap_packet_t *eap_packet)
+int fr_aka_sim_crypto_update_checkcode(fr_aka_sim_checkcode_t *checkcode, eap_packet_t *eap_packet)
 {
 	uint16_t		packet_len;
 	eap_packet_raw_t	eap_hdr;
@@ -143,7 +143,7 @@ int fr_sim_crypto_update_checkcode(fr_sim_checkcode_t *checkcode, eap_packet_t *
  *	- <= 0 on failure.
  *	- > 0 the number of bytes written to out.
  */
-ssize_t fr_sim_crypto_finalise_checkcode(uint8_t *out, fr_sim_checkcode_t **checkcode)
+ssize_t fr_aka_sim_crypto_finalise_checkcode(uint8_t *out, fr_aka_sim_checkcode_t **checkcode)
 {
 	unsigned int len;
 
@@ -168,7 +168,7 @@ ssize_t fr_sim_crypto_finalise_checkcode(uint8_t *out, fr_sim_checkcode_t **chec
  *	- 0 if we found and zeroed out the mac field.
  *	- -1 if the field was malformed.
  */
-static int fr_sim_find_mac(uint8_t const **out, uint8_t *data, size_t data_len)
+static int fr_aka_sim_find_mac(uint8_t const **out, uint8_t *data, size_t data_len)
 {
 	uint8_t *p = data, *end = p + data_len;
 	size_t len;
@@ -177,16 +177,16 @@ static int fr_sim_find_mac(uint8_t const **out, uint8_t *data, size_t data_len)
 
 	p += 3;	/* Skip header */
 	while ((p + 2) < end) {
-		if (p[0] == FR_SIM_MAC) {
+		if (p[0] == FR_MAC) {
 			len = p[1] << 2;
 			if ((p + len) > end) {
 				fr_strerror_printf("Malformed AT_MAC: Length (%zu) exceeds buffer (%zu)", len, end - p);
 				return -1;
 			}
 
-			if (len != SIM_MAC_SIZE) {
+			if (len != AKA_SIM_MAC_SIZE) {
 				fr_strerror_printf("Malformed AT_MAC: Length (%zu) incorrect (%u)",
-						   len, SIM_MAC_SIZE);
+						   len, AKA_SIM_MAC_SIZE);
 				return -1;
 			}
 			*out = p + 4;
@@ -230,10 +230,10 @@ static int fr_sim_find_mac(uint8_t const **out, uint8_t *data, size_t data_len)
  *	- 0 if there's no MAC attribute to verify.
  *	- > 0 the number of bytes written to out.
  */
-ssize_t fr_sim_crypto_sign_packet(uint8_t out[static SIM_MAC_DIGEST_SIZE],
-				   eap_packet_t *eap_packet, bool zero_mac,
-				  EVP_MD const *md, uint8_t const *key, size_t const key_len,
-				  uint8_t const *hmac_extra, size_t const hmac_extra_len)
+ssize_t fr_aka_sim_crypto_sign_packet(uint8_t out[static AKA_SIM_MAC_DIGEST_SIZE],
+				      eap_packet_t *eap_packet, bool zero_mac,
+				      EVP_MD const *md, uint8_t const *key, size_t const key_len,
+				      uint8_t const *hmac_extra, size_t const hmac_extra_len)
 {
 	EVP_MD_CTX		*md_ctx = NULL;
 	EVP_PKEY		*pkey;
@@ -304,7 +304,7 @@ ssize_t fr_sim_crypto_sign_packet(uint8_t out[static SIM_MAC_DIGEST_SIZE],
 	 *	digest 16 bytes of zero.
 	 */
 	if (zero_mac) {
-		switch (fr_sim_find_mac(&mac, p, end - p)) {
+		switch (fr_aka_sim_find_mac(&mac, p, end - p)) {
 		case 0:
 		{
 			uint8_t zero[16] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -400,7 +400,7 @@ ssize_t fr_sim_crypto_sign_packet(uint8_t out[static SIM_MAC_DIGEST_SIZE],
 	MSK    = FK[256..767]
 	EMSK   = FK[768..1279]
  @endverbatim
- * @note expects keys to contain a SIM_VECTOR_GSM.
+ * @note expects keys to contain a AKA_SIM_VECTOR_GSM.
  *
  * @param[in,out] keys		Contains the authentication vectors and the buffers
  *				to store the result of the derivation.
@@ -408,22 +408,22 @@ ssize_t fr_sim_crypto_sign_packet(uint8_t out[static SIM_MAC_DIGEST_SIZE],
  *	- 0 on success.
  *	- -1 on failure.
  */
-int fr_sim_crypto_kdf_0_gsm(fr_sim_keys_t *keys)
+int fr_aka_sim_crypto_kdf_0_gsm(fr_aka_sim_keys_t *keys)
 {
 	fr_sha1_ctx	context;
 	uint8_t		fk[160];
 
-	uint8_t		buf[SIM_MAX_STRING_LENGTH + sizeof(keys->gsm.nonce_mt) + 2 + sizeof(keys->gsm.version_select)];
+	uint8_t		buf[AKA_SIM_MAX_STRING_LENGTH + sizeof(keys->gsm.nonce_mt) + 2 + sizeof(keys->gsm.version_select)];
 	uint8_t		*p;
 
-	if (!fr_cond_assert(keys->vector_type == SIM_VECTOR_GSM)) return -1;
+	if (!fr_cond_assert(keys->vector_type == AKA_SIM_VECTOR_GSM)) return -1;
 
 	/*
 	 *	Our stack buffer should be large enough in
 	 *	all cases.
 	 */
 	if (!fr_cond_assert((keys->identity_len +
-			    (SIM_VECTOR_GSM_KC_SIZE * 3) +
+			    (AKA_SIM_VECTOR_GSM_KC_SIZE * 3) +
 			    sizeof(keys->gsm.nonce_mt) +
 			    keys->gsm.version_list_len +
 			    sizeof(keys->gsm.version_select)) <= sizeof(buf))) return -1;
@@ -432,14 +432,14 @@ int fr_sim_crypto_kdf_0_gsm(fr_sim_keys_t *keys)
 	memcpy(p, keys->identity, keys->identity_len);
 	p += keys->identity_len;
 
-	memcpy(p, keys->gsm.vector[0].kc, SIM_VECTOR_GSM_KC_SIZE);
-	p += SIM_VECTOR_GSM_KC_SIZE;
+	memcpy(p, keys->gsm.vector[0].kc, AKA_SIM_VECTOR_GSM_KC_SIZE);
+	p += AKA_SIM_VECTOR_GSM_KC_SIZE;
 
-	memcpy(p, keys->gsm.vector[1].kc, SIM_VECTOR_GSM_KC_SIZE);
-	p += SIM_VECTOR_GSM_KC_SIZE;
+	memcpy(p, keys->gsm.vector[1].kc, AKA_SIM_VECTOR_GSM_KC_SIZE);
+	p += AKA_SIM_VECTOR_GSM_KC_SIZE;
 
-	memcpy(p, keys->gsm.vector[2].kc, SIM_VECTOR_GSM_KC_SIZE);
-	p += SIM_VECTOR_GSM_KC_SIZE;
+	memcpy(p, keys->gsm.vector[2].kc, AKA_SIM_VECTOR_GSM_KC_SIZE);
+	p += AKA_SIM_VECTOR_GSM_KC_SIZE;
 
 	memcpy(p, keys->gsm.nonce_mt, sizeof(keys->gsm.nonce_mt));
 	p += sizeof(keys->gsm.nonce_mt);
@@ -457,15 +457,15 @@ int fr_sim_crypto_kdf_0_gsm(fr_sim_keys_t *keys)
 	 */
 	fr_sha1_init(&context);
 	fr_sha1_update(&context, buf, p - buf);
-	fr_sha1_final(keys->master_key, &context);
+	fr_sha1_final(keys->mk, &context);
 
-	FR_PROTO_HEX_DUMP(keys->master_key, sizeof(keys->master_key), "Master key");
+	FR_PROTO_HEX_DUMP(keys->mk, sizeof(keys->mk), "Master key");
 
 	/*
 	 *	Now use the PRF to expand it, generated
 	 *	k_aut, k_encr, MSK and EMSK.
 	 */
-	fr_sim_fips186_2prf(fk, keys->master_key);
+	fr_aka_sim_fips186_2prf(fk, keys->mk);
 
 	/*
 	 *	Split up the result
@@ -475,9 +475,9 @@ int fr_sim_crypto_kdf_0_gsm(fr_sim_keys_t *keys)
 	p += 16;
 	FR_PROTO_HEX_DUMP(keys->k_encr, sizeof(keys->k_encr), "K_encr");
 
-	memcpy(keys->k_aut, p, EAP_SIM_AUTH_SIZE);		/* 128 bits for auth */
-	p += EAP_SIM_AUTH_SIZE;
-	keys->k_aut_len = EAP_SIM_AUTH_SIZE;
+	memcpy(keys->k_aut, p, EAP_AKA_SIM_AUTH_SIZE);		/* 128 bits for auth */
+	p += EAP_AKA_SIM_AUTH_SIZE;
+	keys->k_aut_len = EAP_AKA_SIM_AUTH_SIZE;
 	FR_PROTO_HEX_DUMP(keys->k_aut, keys->k_aut_len, "K_aut");
 
 	memcpy(keys->msk, p, 64);				/* 64 bytes for Master Session Key */
@@ -492,7 +492,7 @@ int fr_sim_crypto_kdf_0_gsm(fr_sim_keys_t *keys)
 
 /** Key Derivation Function as described in RFC4187 (EAP-AKA) section 7
  *
- * @note expects keys to contain a SIM_VECTOR_UMTS.
+ * @note expects keys to contain a AKA_SIM_VECTOR_UMTS.
  *
  @verbatim
 	MK     = SHA1(Identity|IK|CK)
@@ -509,15 +509,15 @@ int fr_sim_crypto_kdf_0_gsm(fr_sim_keys_t *keys)
  *	- 0 on success.
  *	- -1 on failure.
  */
-int fr_sim_crypto_kdf_0_umts(fr_sim_keys_t *keys)
+int fr_aka_sim_crypto_kdf_0_umts(fr_aka_sim_keys_t *keys)
 {
 	fr_sha1_ctx	context;
 	uint8_t		fk[160];
-	uint8_t		buf[SIM_MAX_STRING_LENGTH + sizeof(keys->umts.vector.ik) + sizeof(keys->umts.vector.ck)];
+	uint8_t		buf[AKA_SIM_MAX_STRING_LENGTH + sizeof(keys->umts.vector.ik) + sizeof(keys->umts.vector.ck)];
 	uint8_t		*p;
 	size_t		blen;
 
-	if (!fr_cond_assert(keys->vector_type == SIM_VECTOR_UMTS)) return - 1;
+	if (!fr_cond_assert(keys->vector_type == AKA_SIM_VECTOR_UMTS)) return - 1;
 
 	/*
 	 *	Our stack buffer should be large enough in
@@ -542,13 +542,13 @@ int fr_sim_crypto_kdf_0_umts(fr_sim_keys_t *keys)
 	/* do the master key first */
 	fr_sha1_init(&context);
 	fr_sha1_update(&context, buf, blen);
-	fr_sha1_final(keys->master_key, &context);
+	fr_sha1_final(keys->mk, &context);
 
 	/*
    	 * now use the PRF to expand it, generated k_aut, k_encr,
 	 * MSK and EMSK.
 	 */
-	fr_sim_fips186_2prf(fk, keys->master_key);
+	fr_aka_sim_fips186_2prf(fk, keys->mk);
 
 	/* split up the result */
 	p = fk;
@@ -581,7 +581,7 @@ int fr_sim_crypto_kdf_0_umts(fr_sim_keys_t *keys)
 	L1 = 0x00 0x06
  @endverbatim
  *
- * @note expects keys to contain a SIM_VECTOR_UMTS.
+ * @note expects keys to contain a AKA_SIM_VECTOR_UMTS.
  *
  * @param[in,out] keys		Contains the authentication vectors and the buffers
  *				to store the result of the derivation.
@@ -589,7 +589,7 @@ int fr_sim_crypto_kdf_0_umts(fr_sim_keys_t *keys)
  *	- 0 on success.
  *	- -1 on failure.
  */
-static int sim_crypto_derive_ck_ik_prime(fr_sim_keys_t *keys)
+static int derive_ck_ik_prime(fr_aka_sim_keys_t *keys)
 {
 	uint8_t		digest[sizeof(keys->ik_prime) + sizeof(keys->ck_prime)];
 	size_t		len;
@@ -598,7 +598,7 @@ static int sim_crypto_derive_ck_ik_prime(fr_sim_keys_t *keys)
 	uint16_t	l0, l1;
 
 	uint8_t		k[sizeof(keys->umts.vector.ik) + sizeof(keys->umts.vector.ck)];
-	uint8_t		s[sizeof(uint8_t) + SIM_MAX_STRING_LENGTH + sizeof(l0) + SIM_SQN_AK_SIZE + sizeof(l1)];
+	uint8_t		s[sizeof(uint8_t) + AKA_SIM_MAX_STRING_LENGTH + sizeof(l0) + AKA_SIM_SQN_AK_SIZE + sizeof(l1)];
 
 	uint8_t		*p = s;
 
@@ -606,7 +606,7 @@ static int sim_crypto_derive_ck_ik_prime(fr_sim_keys_t *keys)
 	EVP_PKEY	*pkey;
 	EVP_MD_CTX	*md_ctx = NULL;
 
-	if (!fr_cond_assert(keys->vector_type == SIM_VECTOR_UMTS)) return -1;
+	if (!fr_cond_assert(keys->vector_type == AKA_SIM_VECTOR_UMTS)) return -1;
 
 	uint48_to_buff(sqn_ak_buff, keys->sqn ^ uint48_from_buff(keys->umts.vector.ak));
 
@@ -617,13 +617,13 @@ static int sim_crypto_derive_ck_ik_prime(fr_sim_keys_t *keys)
 	if (!fr_cond_assert((sizeof(uint8_t) +
 			     keys->network_len +
 			     sizeof(l0) +
-			     SIM_SQN_AK_SIZE +
+			     AKA_SIM_SQN_AK_SIZE +
 			     sizeof(l1)) <= sizeof(s))) return -1;
 
 	FR_PROTO_HEX_DUMP(keys->network, keys->network_len, "Network");
 	FR_PROTO_HEX_DUMP(keys->umts.vector.ck, sizeof(keys->umts.vector.ck), "CK");
 	FR_PROTO_HEX_DUMP(keys->umts.vector.ik, sizeof(keys->umts.vector.ik), "IK");
-	FR_PROTO_HEX_DUMP(sqn_ak_buff, SIM_SQN_AK_SIZE, "SQN ⊕ AK");
+	FR_PROTO_HEX_DUMP(sqn_ak_buff, AKA_SIM_SQN_AK_SIZE, "SQN ⊕ AK");
 
 	/*
 	 *	FC || P0 || L0 || P1 || L1 || ... || Pn || Ln
@@ -636,10 +636,10 @@ static int sim_crypto_derive_ck_ik_prime(fr_sim_keys_t *keys)
 	memcpy(p, &l0, sizeof(l0));
 	p += sizeof(l0);
 
-	memcpy(p, sqn_ak_buff, SIM_SQN_AK_SIZE);
-	p += SIM_SQN_AK_SIZE;
+	memcpy(p, sqn_ak_buff, AKA_SIM_SQN_AK_SIZE);
+	p += AKA_SIM_SQN_AK_SIZE;
 
-	l1 = htons(SIM_SQN_AK_SIZE);
+	l1 = htons(AKA_SIM_SQN_AK_SIZE);
 	memcpy(p, &l1, sizeof(l1));
 	p += sizeof(l1);
 
@@ -717,8 +717,8 @@ static int sim_crypto_derive_ck_ik_prime(fr_sim_keys_t *keys)
  *	- 0 on success.
  *	- -1 on failure.
  */
-static int sim_crypto_aka_prime_prf(uint8_t *out, size_t outlen,
-				    uint8_t const *key, size_t key_len, uint8_t const *in, size_t in_len)
+static int aka_prime_prf(uint8_t *out, size_t outlen,
+			 uint8_t const *key, size_t key_len, uint8_t const *in, size_t in_len)
 {
 	uint8_t		*p = out, *end = p + outlen;
 	uint8_t		c = 0;
@@ -782,7 +782,7 @@ static int sim_crypto_aka_prime_prf(uint8_t *out, size_t outlen,
 	EMSK   = MK[1152..1663]
  @endverbatim
  *
- * @note expects keys to contain a SIM_VECTOR_UMTS.
+ * @note expects keys to contain a AKA_SIM_VECTOR_UMTS.
  *
  * @param[in,out] keys		Contains the authentication vectors and the buffers
  *				to store the result of the derivation.
@@ -790,19 +790,19 @@ static int sim_crypto_aka_prime_prf(uint8_t *out, size_t outlen,
  *	- 0 on success.
  *	- -1 on failure.
  */
-int fr_sim_crypto_kdf_1_umts(fr_sim_keys_t *keys)
+int fr_aka_sim_crypto_kdf_1_umts(fr_aka_sim_keys_t *keys)
 {
 	uint8_t k[sizeof(keys->ck_prime) + sizeof(keys->ik_prime)];
 #define KDF_1_S_STATIC	"EAP-AKA'"
-	uint8_t s[(sizeof(KDF_1_S_STATIC) - 1) + SIM_MAX_STRING_LENGTH];
+	uint8_t s[(sizeof(KDF_1_S_STATIC) - 1) + AKA_SIM_MAX_STRING_LENGTH];
 	uint8_t *p = s;
 
 	uint8_t	mk[208];
 	size_t	s_len;
 
-	sim_crypto_derive_ck_ik_prime(keys);
+	derive_ck_ik_prime(keys);
 
-	if (!fr_cond_assert(keys->vector_type == SIM_VECTOR_UMTS)) return -1;
+	if (!fr_cond_assert(keys->vector_type == AKA_SIM_VECTOR_UMTS)) return -1;
 
 	/*
 	 *	build s, a concatenation of EAP-AKA' and Identity
@@ -829,7 +829,7 @@ int fr_sim_crypto_kdf_1_umts(fr_sim_keys_t *keys)
 	/*
 	 *	Feed into PRF
 	 */
-	if (sim_crypto_aka_prime_prf(mk, sizeof(mk), k, sizeof(k), s, s_len) < 0) return -1;
+	if (aka_prime_prf(mk, sizeof(mk), k, sizeof(k), s, s_len) < 0) return -1;
 
 	/*
 	 *	Split the PRF output into separate keys
@@ -854,23 +854,50 @@ int fr_sim_crypto_kdf_1_umts(fr_sim_keys_t *keys)
 }
 
 
-/** Initialise fr_sim_keys_t with EAP-SIM/EAP-AKA['] reauthentication data
+/** Initialise fr_aka_sim_keys_t with EAP-SIM reauthentication data
  *
- * Generates a new nonce_s and copies the mk and counter values into the fr_sim_keys_t.
+ * Generates a new nonce_s and copies the mk and counter values into the fr_aka_sim_keys_t.
  *
- * @param[out] keys		structure to populate.
- * @param[in] master_key	from original authentication.
- * @param[in] counter		re-authentication counter.
+ * @param[out] keys	structure to populate.
+ * @param[in] mk	from original authentication.
+ * @param[in] counter	re-authentication counter.
  */
-void fr_sim_crypto_keys_init_reauth(fr_sim_keys_t *keys,
-				    uint8_t const master_key[static SIM_MK_SIZE], uint16_t counter)
+void fr_aka_sim_crypto_keys_init_kdf_0_reauth(fr_aka_sim_keys_t *keys,
+					      uint8_t const mk[static AKA_SIM_MK_SIZE], uint16_t counter)
 {
 	uint32_t nonce_s[4];
 
 	/*
 	 *	Copy in master key
 	 */
-	memcpy(keys->master_key, master_key, sizeof(keys->master_key));
+	memcpy(keys->mk, mk, sizeof(keys->mk));
+
+	keys->reauth.counter = counter;
+
+	nonce_s[0] = fr_rand();
+	nonce_s[1] = fr_rand();
+	nonce_s[2] = fr_rand();
+	nonce_s[3] = fr_rand();
+	memcpy(keys->reauth.nonce_s, (uint8_t *)&nonce_s, sizeof(keys->reauth.nonce_s));
+}
+
+/** Initialise fr_aka_sim_keys_t with EAP-AKA['] reauthentication data
+ *
+ * Generates a new nonce_s and copies the mk and counter values into the fr_aka_sim_keys_t.
+ *
+ * @param[out] keys	structure to populate.
+ * @param[in] k_re	from original authentication.
+ * @param[in] counter	re-authentication counter.
+ */
+void fr_aka_sim_crypto_keys_init_kdf_1_reauth(fr_aka_sim_keys_t *keys,
+					      uint8_t const k_re[static AKA_SIM_K_RE_SIZE], uint16_t counter)
+{
+	uint32_t nonce_s[4];
+
+	/*
+	 *	Copy in master key
+	 */
+	memcpy(keys->k_re, k_re, sizeof(keys->k_re));
 
 	keys->reauth.counter = counter;
 
@@ -884,7 +911,7 @@ void fr_sim_crypto_keys_init_reauth(fr_sim_keys_t *keys,
 /** Key Derivation Function (Fast-Reauthentication) as described in RFC4186/7 (EAP-SIM/AKA) section 7
  *
  @verbatim
-	XKEY' = SHA1(Identity|counter|NONCE_S| MK)
+	XKEY' = SHA1(Identity|counter|NONCE_S|MK)
 	FK    = PRF(XKEY')
 	MSK   = FK[0..511]
 	EMSK  = FK[512..1023]
@@ -892,9 +919,9 @@ void fr_sim_crypto_keys_init_reauth(fr_sim_keys_t *keys,
  *
  * Derives new MSK, EMSK, k_aut, k_encr
  *
- * Use #fr_sim_crypto_keys_init_reauth to populate the #fr_sim_keys_t structure.
+ * Use #fr_aka_sim_crypto_keys_init_reauth to populate the #fr_aka_sim_keys_t structure.
  *
- * @note expects keys to contain a populated master_key, none_s and counter values.
+ * @note expects keys to contain a populated mk, none_s and counter values.
  *
  * @param[in,out] keys		Contains the authentication vectors and the buffers
  *				to store the result of the derivation.
@@ -902,11 +929,10 @@ void fr_sim_crypto_keys_init_reauth(fr_sim_keys_t *keys,
  *	- 0 on success.
  *	- -1 on failure.
  */
-int fr_sim_crypto_kdf_0_reauth(fr_sim_keys_t *keys)
+int fr_aka_sim_crypto_kdf_0_reauth(fr_aka_sim_keys_t *keys)
 {
 	EVP_MD_CTX	*md_ctx;
 	uint8_t		fk[160];
-	uint8_t		xkey_prime[SHA1_DIGEST_LENGTH];
 
 	uint8_t		buf[384];
 	uint8_t		*p;
@@ -925,7 +951,7 @@ int fr_sim_crypto_kdf_0_reauth(fr_sim_keys_t *keys)
 		return -1;
 	}
 
-	need = keys->identity_len + sizeof(uint16_t) + SIM_NONCE_S_SIZE + sizeof(keys->master_key);
+	need = keys->identity_len + sizeof(uint16_t) + AKA_SIM_NONCE_S_SIZE + sizeof(keys->mk);
 	if (need > sizeof(buf)) {
 		fr_strerror_printf("Identity too long. PRF input is %zu bytes, input buffer is %zu bytes",
 				   need, sizeof(buf));
@@ -936,16 +962,16 @@ int fr_sim_crypto_kdf_0_reauth(fr_sim_keys_t *keys)
 	 *	Re-derive k_aut and k_encr from the original Master Key
 	 *	These keys stay the same over multiple re-auth attempts.
 	 */
-	fr_sim_fips186_2prf(fk, keys->master_key);
+	fr_aka_sim_fips186_2prf(fk, keys->mk);
 
 	p = fk;
 	memcpy(keys->k_encr, p, 16);				/* 128 bits for encryption */
 	p += 16;
 	FR_PROTO_HEX_DUMP(keys->k_encr, sizeof(keys->k_encr), "K_encr");
 
-	memcpy(keys->k_aut,  p, EAP_SIM_AUTH_SIZE);		/* 128 bits for auth */
+	memcpy(keys->k_aut,  p, EAP_AKA_SIM_AUTH_SIZE);		/* 128 bits for auth */
 
-	keys->k_aut_len = EAP_SIM_AUTH_SIZE;
+	keys->k_aut_len = EAP_AKA_SIM_AUTH_SIZE;
 	FR_PROTO_HEX_DUMP(keys->k_aut, keys->k_aut_len, "K_aut");
 
 	/*
@@ -978,8 +1004,8 @@ int fr_sim_crypto_kdf_0_reauth(fr_sim_keys_t *keys)
 	/*
 	 *	Master key
 	 */
-	memcpy(p, keys->master_key, sizeof(keys->master_key));
-	p += sizeof(keys->master_key);
+	memcpy(p, keys->mk, sizeof(keys->mk));
+	p += sizeof(keys->mk);
 
 	FR_PROTO_HEX_DUMP(buf, p - buf, "Identity || counter || NONCE_S || MK");
 
@@ -1004,19 +1030,19 @@ int fr_sim_crypto_kdf_0_reauth(fr_sim_keys_t *keys)
 		goto error;
 	}
 
-	if (EVP_DigestFinal_ex(md_ctx, xkey_prime, &len) != 1) {
+	if (EVP_DigestFinal_ex(md_ctx, keys->reauth.xkey_prime, &len) != 1) {
 		tls_strerror_printf("Failed finalising digest");
 		goto error;
 	}
 
 	EVP_MD_CTX_destroy(md_ctx);
 
-	FR_PROTO_HEX_DUMP(xkey_prime, sizeof(xkey_prime), "xkey'");
+	FR_PROTO_HEX_DUMP(keys->reauth.xkey_prime, sizeof(keys->reauth.xkey_prime), "xkey'");
 
 	/*
 	 *	Expand XKEY' with PRF
 	 */
-	fr_sim_fips186_2prf(fk, xkey_prime);
+	fr_aka_sim_fips186_2prf(fk, keys->reauth.xkey_prime);
 
 	/*
 	 *	Split up the result
@@ -1046,10 +1072,10 @@ int fr_sim_crypto_kdf_0_reauth(fr_sim_keys_t *keys)
  *	- 0 on success.
  *	- -1 on failure.
  */
-int fr_sim_crypto_kdf_1_reauth(fr_sim_keys_t *keys)
+int fr_aka_sim_crypto_kdf_1_reauth(fr_aka_sim_keys_t *keys)
 {
 #define KDF_1_S_REAUTH_STATIC	"EAP-AKA' re-auth"
-	uint8_t s[(sizeof(KDF_1_S_REAUTH_STATIC) - 1) + SIM_MAX_STRING_LENGTH + sizeof(uint16_t) + SIM_NONCE_S_SIZE];
+	uint8_t s[(sizeof(KDF_1_S_REAUTH_STATIC) - 1) + AKA_SIM_MAX_STRING_LENGTH + sizeof(uint16_t) + AKA_SIM_NONCE_S_SIZE];
 	uint8_t *p = s;
 
 	uint8_t	mk[128];
@@ -1057,7 +1083,7 @@ int fr_sim_crypto_kdf_1_reauth(fr_sim_keys_t *keys)
 	if (!fr_cond_assert(((sizeof(KDF_1_S_REAUTH_STATIC) - 1) +
 			     keys->identity_len +
 			     sizeof(uint16_t) +
-			     SIM_NONCE_S_SIZE) <= sizeof(s))) return -1;
+			     AKA_SIM_NONCE_S_SIZE) <= sizeof(s))) return -1;
 
 	/*
 	 *	"EAP-AKA' re-auth"
@@ -1089,7 +1115,7 @@ int fr_sim_crypto_kdf_1_reauth(fr_sim_keys_t *keys)
 	/*
 	 *	Feed into PRF
 	 */
-	if (sim_crypto_aka_prime_prf(mk, sizeof(mk), keys->k_re, sizeof(keys->k_re), s, p - s) < 0) return -1;
+	if (aka_prime_prf(mk, sizeof(mk), keys->k_re, sizeof(keys->k_re), s, p - s) < 0) return -1;
 
 	FR_PROTO_HEX_DUMP(mk, sizeof(mk), "mk");
 
@@ -1109,15 +1135,15 @@ int fr_sim_crypto_kdf_1_reauth(fr_sim_keys_t *keys)
  * @param[in] request	The current request.
  * @param[in] keys	SIM keys associated with the session.
  */
-void fr_sim_crypto_keys_log(REQUEST *request, fr_sim_keys_t *keys)
+void fr_aka_sim_crypto_keys_log(REQUEST *request, fr_aka_sim_keys_t *keys)
 {
-	RDEBUG3("Cryptographic inputs");
+	RDEBUG3("KDF inputs");
 
 	RINDENT();
 	RHEXDUMP_INLINE(L_DBG_LVL_3, keys->identity, keys->identity_len,
 			"Identity     :");
 	switch (keys->vector_type) {
-	case SIM_VECTOR_GSM:
+	case AKA_SIM_VECTOR_GSM:
 	{
 		unsigned int i;
 
@@ -1128,72 +1154,89 @@ void fr_sim_crypto_keys_log(REQUEST *request, fr_sim_keys_t *keys)
 				"version_list :");
 
 		for (i = 0; i < keys->gsm.num_vectors; i++) {
-			RHEXDUMP_INLINE(L_DBG_LVL_3, keys->gsm.vector[i].rand, SIM_VECTOR_GSM_RAND_SIZE,
+			RHEXDUMP_INLINE(L_DBG_LVL_3, keys->gsm.vector[i].rand, AKA_SIM_VECTOR_GSM_RAND_SIZE,
 					"[%i] RAND    :", i);
-			RHEXDUMP_INLINE(L_DBG_LVL_3, keys->gsm.vector[i].sres, SIM_VECTOR_GSM_SRES_SIZE,
+			RHEXDUMP_INLINE(L_DBG_LVL_3, keys->gsm.vector[i].sres, AKA_SIM_VECTOR_GSM_SRES_SIZE,
 					"[%i] SRES    :", i);
-			RHEXDUMP_INLINE(L_DBG_LVL_3, keys->gsm.vector[i].kc, SIM_VECTOR_GSM_KC_SIZE,
+			RHEXDUMP_INLINE(L_DBG_LVL_3, keys->gsm.vector[i].kc, AKA_SIM_VECTOR_GSM_KC_SIZE,
 					"[%i] KC      :", i);
 		}
 	}
 		break;
 
-	case SIM_VECTOR_UMTS:
-		RHEXDUMP_INLINE(L_DBG_LVL_3, keys->umts.vector.autn, SIM_VECTOR_UMTS_AUTN_SIZE,
+	case AKA_SIM_VECTOR_UMTS:
+		RHEXDUMP_INLINE(L_DBG_LVL_3, keys->umts.vector.autn, AKA_SIM_VECTOR_UMTS_AUTN_SIZE,
 				"AUTN         :");
 
-		RHEXDUMP_INLINE(L_DBG_LVL_3, keys->umts.vector.ck, SIM_VECTOR_UMTS_CK_SIZE,
+		RHEXDUMP_INLINE(L_DBG_LVL_3, keys->umts.vector.ck, AKA_SIM_VECTOR_UMTS_CK_SIZE,
 				"CK           :");
 
-		RHEXDUMP_INLINE(L_DBG_LVL_3, keys->umts.vector.ik, SIM_VECTOR_UMTS_IK_SIZE,
+		RHEXDUMP_INLINE(L_DBG_LVL_3, keys->umts.vector.ik, AKA_SIM_VECTOR_UMTS_IK_SIZE,
 				"IK           :");
 
-		RHEXDUMP_INLINE(L_DBG_LVL_3, keys->umts.vector.rand, SIM_VECTOR_UMTS_RAND_SIZE,
+		RHEXDUMP_INLINE(L_DBG_LVL_3, keys->umts.vector.rand, AKA_SIM_VECTOR_UMTS_RAND_SIZE,
 				"RAND         :");
 
 		RHEXDUMP_INLINE(L_DBG_LVL_3, keys->umts.vector.xres, keys->umts.vector.xres_len,
 				"XRES         :");
 
-		RHEXDUMP_INLINE(L_DBG_LVL_3, keys->ck_prime, SIM_VECTOR_UMTS_CK_SIZE,
+		RHEXDUMP_INLINE(L_DBG_LVL_3, keys->ck_prime, AKA_SIM_VECTOR_UMTS_CK_SIZE,
 				"CK'          :");
 
-		RHEXDUMP_INLINE(L_DBG_LVL_3, keys->ik_prime, SIM_VECTOR_UMTS_IK_SIZE,
+		RHEXDUMP_INLINE(L_DBG_LVL_3, keys->ik_prime, AKA_SIM_VECTOR_UMTS_IK_SIZE,
 				"IK'          :");
 		break;
 
-	case SIM_VECTOR_UMTS_REAUTH:
-		RHEXDUMP_INLINE(L_DBG_LVL_3, keys->master_key, sizeof(keys->master_key), "mk           :");
-		RDEBUG3("counter      : %u", keys->reauth.counter);
-		RHEXDUMP_INLINE(L_DBG_LVL_3, keys->reauth.nonce_s, sizeof(keys->reauth.nonce_s), "nonce_s      :");
+	case AKA_SIM_VECTOR_UMTS_REAUTH_KDF_0_REAUTH:
+		RHEXDUMP_INLINE(L_DBG_LVL_3, keys->mk, sizeof(keys->mk),
+				"MK           :");
+		RDEBUG3(
+				"counter      : %u", keys->reauth.counter);
+		RHEXDUMP_INLINE(L_DBG_LVL_3, keys->reauth.nonce_s, sizeof(keys->reauth.nonce_s),
+				"nonce_s      :");
 		break;
 
-	case SIM_VECTOR_NONE:
+	case AKA_SIM_VECTOR_UMTS_REAUTH_KDF_1_REAUTH:
+		RHEXDUMP_INLINE(L_DBG_LVL_3, keys->k_re, sizeof(keys->k_re),
+				"k_re         :");
+		RDEBUG3(
+				"counter      : %u", keys->reauth.counter);
+		RHEXDUMP_INLINE(L_DBG_LVL_3, keys->reauth.nonce_s, sizeof(keys->reauth.nonce_s),
+				"nonce_s      :");
+		break;
+
+	case AKA_SIM_VECTOR_NONE:
 		break;
 	}
 	REXDENT();
 
-	RDEBUG3("Derived keys");
+	RDEBUG3("Intermediary keys");
 	RINDENT();
-
 	switch (keys->vector_type) {
-	case SIM_VECTOR_UMTS_REAUTH:
+	case AKA_SIM_VECTOR_UMTS_REAUTH_KDF_0_REAUTH:
+		RHEXDUMP_INLINE(L_DBG_LVL_3, keys->reauth.xkey_prime, sizeof(keys->reauth.xkey_prime),
+				"XKEY'        :");
 		break;
 
 	default:
-		RHEXDUMP_INLINE(L_DBG_LVL_3, keys->master_key, sizeof(keys->master_key),
-				"mk           :");
 		break;
 	}
+	REXDENT();
+
+	RDEBUG3("PRF output");
+	RINDENT();
+	RHEXDUMP_INLINE(L_DBG_LVL_3, keys->mk, sizeof(keys->mk),
+			"MK           :");
+	RHEXDUMP_INLINE(L_DBG_LVL_3, keys->k_re, sizeof(keys->k_re),
+			"k_re         :");
 	RHEXDUMP_INLINE(L_DBG_LVL_3, keys->k_aut, keys->k_aut_len,
 			"k_aut        :");
 	RHEXDUMP_INLINE(L_DBG_LVL_3, keys->k_encr, sizeof(keys->k_encr),
 			"k_encr       :");
-	RHEXDUMP_INLINE(L_DBG_LVL_3, keys->k_re, sizeof(keys->k_re),
-			"k_re         :");
 	RHEXDUMP_INLINE(L_DBG_LVL_3, keys->msk, sizeof(keys->msk),
-			"msk          :");
+			"MSK          :");
 	RHEXDUMP_INLINE(L_DBG_LVL_3, keys->emsk, sizeof(keys->emsk),
-			"emsk         :");
+			"EMSK         :");
 	REXDENT();
 }
 
@@ -1209,7 +1252,7 @@ void fr_sim_crypto_keys_log(REQUEST *request, fr_sim_keys_t *keys)
 /*
  *	EAP-SIM (RFC4186) GSM authentication vectors
  */
-static fr_sim_keys_t const rfc4186_vector0_in = {
+static fr_aka_sim_keys_t const rfc4186_vector0_in = {
 	.identity = (uint8_t const *)"1244070100000001@eapsim.foo",
 	.identity_len = sizeof("1244070100000001@eapsim.foo") - 1,
 
@@ -1241,10 +1284,10 @@ static fr_sim_keys_t const rfc4186_vector0_in = {
 		.version_select = { 0x00, 0x01 },
 		.num_vectors = 3
 	},
-	.vector_type = SIM_VECTOR_GSM
+	.vector_type = AKA_SIM_VECTOR_GSM
 };
 
-static fr_sim_keys_t const rfc4186_vector0_out = {
+static fr_aka_sim_keys_t const rfc4186_vector0_out = {
 	.k_encr		= { 0x53, 0x6e, 0x5e, 0xbc, 0x44, 0x65, 0x58, 0x2a,
 			    0xa6, 0xa8, 0xec, 0x99, 0x86, 0xeb, 0xb6, 0x20 },
 	.k_aut		= { 0x25, 0xaf, 0x19, 0x42, 0xef, 0xcb, 0xf4, 0xbc,
@@ -1270,7 +1313,7 @@ static fr_sim_keys_t const rfc4186_vector0_out = {
 
 static void test_eap_sim_kdf_0_gsm(void)
 {
-	fr_sim_keys_t	keys;
+	fr_aka_sim_keys_t	keys;
 	int		ret;
 
 /*
@@ -1281,7 +1324,7 @@ static void test_eap_sim_kdf_0_gsm(void)
 
 	memcpy(&keys, &rfc4186_vector0_in, sizeof(keys));
 
-	ret = fr_sim_crypto_kdf_0_gsm(&keys);
+	ret = fr_aka_sim_crypto_kdf_0_gsm(&keys);
 	TEST_CHECK(ret == 0);
 
 	TEST_CHECK(memcmp(&rfc4186_vector0_out.k_encr, keys.k_encr, sizeof(keys.k_encr)) == 0);
@@ -1296,7 +1339,7 @@ static void test_eap_sim_kdf_0_gsm(void)
  *
  *	Test vector from 18 from 3GPP TS 35.208 V9 (the same used by EAP-AKA')
  */
-static fr_sim_keys_t const rfc4187_vector0_in = {
+static fr_aka_sim_keys_t const rfc4187_vector0_in = {
 	.identity = (uint8_t const *)"0555444333222111",
 	.identity_len = sizeof("0555444333222111") - 1,
 
@@ -1316,10 +1359,10 @@ static fr_sim_keys_t const rfc4187_vector0_in = {
 			.xres_len	= 8
 		}
 	},
-	.vector_type = SIM_VECTOR_UMTS
+	.vector_type = AKA_SIM_VECTOR_UMTS
 };
 
-static fr_sim_keys_t const rfc4187_vector0_out = {
+static fr_aka_sim_keys_t const rfc4187_vector0_out = {
 	.k_encr		= { 0x18, 0xe8, 0xb2, 0x0b, 0xcd, 0xa7, 0x04, 0x86,
 			    0xfd, 0x59, 0x59, 0x58, 0x6a, 0x9e, 0x7c, 0x3d },
 	.k_aut		= { 0x18, 0xc0, 0x44, 0x07, 0x0e, 0x5e, 0x64, 0x2a,
@@ -1345,7 +1388,7 @@ static fr_sim_keys_t const rfc4187_vector0_out = {
 
 static void test_eap_aka_kdf_0_umts(void)
 {
-	fr_sim_keys_t	keys;
+	fr_aka_sim_keys_t	keys;
 	int		ret;
 
 /*
@@ -1356,7 +1399,7 @@ static void test_eap_aka_kdf_0_umts(void)
 
 	memcpy(&keys, &rfc4187_vector0_in, sizeof(keys));
 
-	ret = fr_sim_crypto_kdf_0_umts(&keys);
+	ret = fr_aka_sim_crypto_kdf_0_umts(&keys);
 	TEST_CHECK(ret == 0);
 
 	TEST_CHECK(memcmp(&rfc4187_vector0_out.k_encr, keys.k_encr, sizeof(keys.k_encr)) == 0);
@@ -1370,7 +1413,7 @@ static void test_eap_aka_kdf_0_umts(void)
 /*
  *	EAP-SIM (RFC4186) GSM re-authentication vectors
  */
-static fr_sim_keys_t const rfc4186_vector0_reauth_in = {
+static fr_aka_sim_keys_t const rfc4186_vector0_reauth_in = {
 	.identity	= (uint8_t const *)"Y24fNSrz8BP274jOJaF17WfxI8YO7QX00pMXk9XMMVOw7broaNhTczuFq53aEpOkk3L0dm@eapsim.foo",
 	.identity_len	= sizeof("Y24fNSrz8BP274jOJaF17WfxI8YO7QX00pMXk9XMMVOw7broaNhTczuFq53aEpOkk3L0dm@eapsim.foo") - 1,
 
@@ -1379,12 +1422,12 @@ static fr_sim_keys_t const rfc4186_vector0_reauth_in = {
 				.nonce_s = { 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
 					     0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10 }
 			  },
-	.master_key	= { 0xe5, 0x76, 0xd5, 0xca, 0x33, 0x2e, 0x99, 0x30,
+	.mk	= { 0xe5, 0x76, 0xd5, 0xca, 0x33, 0x2e, 0x99, 0x30,
 			    0x01, 0x8b, 0xf1, 0xba, 0xee, 0x27, 0x63, 0xc7,
 			    0x95, 0xb3, 0xc7, 0x12 },
 };
 
-static fr_sim_keys_t const rfc4186_vector0_reauth_out = {
+static fr_aka_sim_keys_t const rfc4186_vector0_reauth_out = {
 	.k_encr		= { 0x53, 0x6e, 0x5e, 0xbc, 0x44, 0x65, 0x58, 0x2a,
 			    0xa6, 0xa8, 0xec, 0x99, 0x86, 0xeb, 0xb6, 0x20 },
 	.k_aut		= { 0x25, 0xaf, 0x19, 0x42, 0xef, 0xcb, 0xf4, 0xbc,
@@ -1410,7 +1453,7 @@ static fr_sim_keys_t const rfc4186_vector0_reauth_out = {
 
 static void test_eap_sim_kdf_0_reauth(void)
 {
-	fr_sim_keys_t	keys;
+	fr_aka_sim_keys_t	keys;
 	int		ret;
 
 /*
@@ -1421,7 +1464,7 @@ static void test_eap_sim_kdf_0_reauth(void)
 
 	memcpy(&keys, &rfc4186_vector0_reauth_in, sizeof(keys));
 
-	ret = fr_sim_crypto_kdf_0_reauth(&keys);
+	ret = fr_aka_sim_crypto_kdf_0_reauth(&keys);
 	TEST_CHECK(ret == 0);
 
 	TEST_CHECK(memcmp(&rfc4186_vector0_reauth_out.k_encr, keys.k_encr, sizeof(keys.k_encr)) == 0);
@@ -1435,7 +1478,7 @@ static void test_eap_sim_kdf_0_reauth(void)
 /*
  *	EAP-AKA' (RFC5448) UMTS authentication vectors
  */
-static fr_sim_keys_t const rfc5448_vector0_in = {
+static fr_aka_sim_keys_t const rfc5448_vector0_in = {
 	.identity = (uint8_t const *)"0555444333222111",
 	.identity_len = sizeof("0555444333222111") - 1,
 
@@ -1458,10 +1501,10 @@ static fr_sim_keys_t const rfc5448_vector0_in = {
 			.xres_len	= 8
 		}
 	},
-	.vector_type = SIM_VECTOR_UMTS
+	.vector_type = AKA_SIM_VECTOR_UMTS
 };
 
-static fr_sim_keys_t const rfc5448_vector0_out = {
+static fr_aka_sim_keys_t const rfc5448_vector0_out = {
 	.ik_prime	= { 0x00, 0x93, 0x96, 0x2d, 0x0d, 0xd8, 0x4a, 0xa5,
 			    0x68, 0x4b, 0x04, 0x5c, 0x9e, 0xdf, 0xfa, 0x04 },
 	.ck_prime	= { 0xcc, 0xfc, 0x23, 0x0c, 0xa7, 0x4f, 0xcc, 0x96,
@@ -1498,7 +1541,7 @@ static fr_sim_keys_t const rfc5448_vector0_out = {
 
 static void test_eap_aka_kdf_1_umts(void)
 {
-	fr_sim_keys_t	keys;
+	fr_aka_sim_keys_t	keys;
 	int		ret;
 
 /*
@@ -1512,7 +1555,7 @@ static void test_eap_aka_kdf_1_umts(void)
 	memcpy(keys.ck_prime, rfc5448_vector0_out.ck_prime, sizeof(keys.ck_prime));
 	memcpy(keys.ik_prime, rfc5448_vector0_out.ik_prime, sizeof(keys.ik_prime));
 
-	ret = fr_sim_crypto_kdf_1_umts(&keys);
+	ret = fr_aka_sim_crypto_kdf_1_umts(&keys);
 	TEST_CHECK(ret == 0);
 
 	TEST_CHECK(memcmp(&rfc5448_vector0_out.k_encr, keys.k_encr, sizeof(keys.k_encr)) == 0);
@@ -1526,7 +1569,7 @@ static void test_eap_aka_kdf_1_umts(void)
 static void test_eap_aka_derive_ck_ik(void)
 {
 
-	fr_sim_keys_t	keys;
+	fr_aka_sim_keys_t	keys;
 	int		ret;
 	fr_log_fp = stdout;
 
@@ -1537,7 +1580,7 @@ static void test_eap_aka_derive_ck_ik(void)
 */
 
 	memcpy(&keys, &rfc5448_vector0_in, sizeof(keys));
-	ret = sim_crypto_derive_ck_ik_prime(&keys);
+	ret = derive_ck_ik_prime(&keys);
 	TEST_CHECK(ret == 0);
 	TEST_CHECK(memcmp(&rfc5448_vector0_out.ck_prime, keys.ck_prime, sizeof(keys.ck_prime)) == 0);
 	TEST_CHECK(memcmp(&rfc5448_vector0_out.ik_prime, keys.ik_prime, sizeof(keys.ik_prime)) == 0);
@@ -1546,7 +1589,7 @@ static void test_eap_aka_derive_ck_ik(void)
 /*
  *	EAP-AKA' (RFC5448) UMTS authentication vectors
  */
-static fr_sim_keys_t const rfc5448_vector0_reauth_in = {
+static fr_aka_sim_keys_t const rfc5448_vector0_reauth_in = {
 	.identity = (uint8_t const *)"5555444333222111",
 	.identity_len = sizeof("5555444333222111") - 1,
 
@@ -1574,7 +1617,7 @@ static fr_sim_keys_t const rfc5448_vector0_reauth_in = {
 /*
  *	Not tested against external source (yet)
  */
-static fr_sim_keys_t const rfc5448_vector0_reauth_out = {
+static fr_aka_sim_keys_t const rfc5448_vector0_reauth_out = {
 	.k_encr		= { 0x76, 0x6f, 0xa0, 0xa6, 0xc3, 0x17, 0x17, 0x4b,
 			    0x81, 0x2d, 0x52, 0xfb, 0xcd, 0x11, 0xa1, 0x79 },
 	.k_aut		= { 0x08, 0x42, 0xea, 0x72, 0x2f, 0xf6, 0x83, 0x5b,
@@ -1602,7 +1645,7 @@ static fr_sim_keys_t const rfc5448_vector0_reauth_out = {
 
 static void test_eap_aka_kdf_1_reauth(void)
 {
-	fr_sim_keys_t	keys;
+	fr_aka_sim_keys_t	keys;
 	int		ret;
 
 /*
@@ -1613,7 +1656,7 @@ static void test_eap_aka_kdf_1_reauth(void)
 
 	memcpy(&keys, &rfc5448_vector0_reauth_in, sizeof(keys));
 
-	ret = fr_sim_crypto_kdf_1_reauth(&keys);
+	ret = fr_aka_sim_crypto_kdf_1_reauth(&keys);
 	TEST_CHECK(ret == 0);
 
 	TEST_CHECK(memcmp(&rfc5448_vector0_reauth_out.k_encr, keys.k_encr, sizeof(keys.k_encr)) == 0);

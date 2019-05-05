@@ -15,7 +15,7 @@
  */
 
 /**
- * @file src/lib/sim/id.c
+ * @file src/lib/aka-sim/id.c
  * @brief EAP-SIM/EAP-AKA identity detection, creation, and decyption.
  *
  * @copyright 2017 The FreeRADIUS server project
@@ -28,17 +28,19 @@
 
 #define us(x) (uint8_t) x
 
-FR_NAME_NUMBER const sim_id_request_table[] = {
-	{ "Any-Id-Req",		SIM_ANY_ID_REQ			},
-	{ "Permanent-Id-Req",	SIM_PERMANENT_ID_REQ		},
-	{ "FullAuth-Id-Req",	SIM_FULLAUTH_ID_REQ		},
+FR_NAME_NUMBER const fr_aka_sim_id_request_table[] = {
+	{ "none",		AKA_SIM_NO_ID_REQ		},
+	{ "no",			AKA_SIM_NO_ID_REQ		},	/* Used for config parsing */
+	{ "Any-Id-Req",		AKA_SIM_ANY_ID_REQ		},
+	{ "Permanent-Id-Req",	AKA_SIM_PERMANENT_ID_REQ	},
+	{ "FullAuth-Id-Req",	AKA_SIM_FULLAUTH_ID_REQ		},
 	{ NULL }
 };
 
-FR_NAME_NUMBER const sim_id_method_hint_table[] = {
-	{ "SIM",		SIM_METHOD_HINT_SIM		},
-	{ "AKA",		SIM_METHOD_HINT_AKA		},
-	{ "AKA'",		SIM_METHOD_HINT_AKA_PRIME	},
+FR_NAME_NUMBER const fr_aka_sim_id_method_table[] = {
+	{ "SIM",		AKA_SIM_METHOD_HINT_SIM		},
+	{ "AKA",		AKA_SIM_METHOD_HINT_AKA		},
+	{ "AKA'",		AKA_SIM_METHOD_HINT_AKA_PRIME	},
 	{ NULL }
 };
 
@@ -49,7 +51,7 @@ FR_NAME_NUMBER const sim_id_method_hint_table[] = {
  * @return
  *	- How long the identity portion of the NAI is.
  */
-size_t fr_sim_id_user_len(char const *nai, size_t nai_len)
+size_t fr_aka_sim_id_user_len(char const *nai, size_t nai_len)
 {
 	char const *p;
 
@@ -67,7 +69,7 @@ size_t fr_sim_id_user_len(char const *nai, size_t nai_len)
  *	- A pointer to where the domain portion of the domain starts.
  *	- NULL if there was no @ in the identity.
  */
-char const *fr_sim_domain(char const *nai, size_t nai_len)
+char const *fr_aka_sim_domain(char const *nai, size_t nai_len)
 {
 	char const *p;
 
@@ -89,7 +91,7 @@ char const *fr_sim_domain(char const *nai, size_t nai_len)
  *	- number of bytes parsed.
  *	- <= 0 on error - The negative offset of where parsing failed.
  */
-ssize_t fr_sim_3gpp_root_nai_domain_mcc_mnc(uint16_t *mnc, uint16_t *mcc,
+ssize_t fr_aka_sim_3gpp_root_nai_domain_mcc_mnc(uint16_t *mnc, uint16_t *mcc,
 					    char const *domain, size_t domain_len)
 {
 	char const *p = domain, *end = p + domain_len;
@@ -137,35 +139,35 @@ ssize_t fr_sim_3gpp_root_nai_domain_mcc_mnc(uint16_t *mnc, uint16_t *mcc,
 	return p - domain;
 }
 
- /** Determine what type of ID was provided in the initial identity response
-  *
-  * @param[out] hint	Whether this is a hint to do EAP-SIM or EAP-AKA[']:
-  *	- SIM_METHOD_HINT_AKA_PRIME	this ID was generated during an EAP-AKA' exchange
-  *					or the supplicant hints it wants to perform EAP-AKA'.
-  *	- SIM_METHOD_HINT_AKA		this ID was generated during an EAP-AKA exchange
-  *					or the supplicant hints it wants to perform EAP-AKA.
-  *	- SIM_METHOD_HINT_SIM		this IS was generated during an EAP-SIM exchange
-  *					or the supplicant hints it wants to perform EAP-SIM.
-  *	- SIM_METHOD_HINT_UNKNOWN	we don't know what type of authentication generated
-  *					this ID or which one to start.
-  * @param[out] type	What type of identity this is:
-  *	- SIM_ID_TYPE_PERMANENT		if the ID is an IMSI.
-  *	- SIM_ID_TYPE_PSEUDONYM		if the ID is a freeform pseudonym.
-  *	- SIM_ID_TYPE_FASTAUTH		if the ID is a fastauth identity.
-  *	- SIM_ID_TYPE_UNKNOWN		if we can't determine what sort of ID this is.
-  * @param[in] id	the NAI string provided.
-  * @param[in] id_len	the length of the NAI string.
-  * @return
-  *	- 0 on success.
-  *	- -1 on failure.
-  */
-int fr_sim_id_type(fr_sim_id_type_t *type, fr_sim_method_hint_t *hint, char const *id, size_t id_len)
+/** Determine what type of ID was provided in the initial identity response
+ *
+ * @param[out] hint	Whether this is a hint to do EAP-SIM or EAP-AKA[']:
+ *	- AKA_SIM_METHOD_HINT_AKA_PRIME		this ID was generated during an EAP-AKA' exchange
+ *						or the supplicant hints it wants to perform EAP-AKA'.
+ *	- AKA_SIM_METHOD_HINT_AKA		this ID was generated during an EAP-AKA exchange
+ *						or the supplicant hints it wants to perform EAP-AKA.
+ *	- AKA_SIM_METHOD_HINT_SIM		this IS was generated during an EAP-SIM exchange
+ *						or the supplicant hints it wants to perform EAP-SIM.
+ *	- AKA_SIM_METHOD_HINT_UNKNOWN		we don't know what type of authentication generated
+ *						this ID or which one to start.
+ * @param[out] type	What type of identity this is:
+ *	- AKA_SIM_ID_TYPE_PERMANENT		if the ID is an IMSI.
+ *	- AKA_SIM_ID_TYPE_PSEUDONYM		if the ID is a freeform pseudonym.
+ *	- AKA_SIM_ID_TYPE_FASTAUTH		if the ID is a fastauth identity.
+ *	- AKA_SIM_ID_TYPE_UNKNOWN		if we can't determine what sort of ID this is.
+ * @param[in] id	the NAI string provided.
+ * @param[in] id_len	the length of the NAI string.
+ * @return
+ *	- 0 on success.
+ *	- -1 on failure.
+ */
+int fr_aka_sim_id_type(fr_aka_sim_id_type_t *type, fr_aka_sim_method_hint_t *hint, char const *id, size_t id_len)
 {
 	size_t i;
 
 	if (id_len < 1) {
-		*hint = SIM_METHOD_HINT_UNKNOWN;
-		*type = SIM_ID_TYPE_UNKNOWN;
+		*hint = AKA_SIM_METHOD_HINT_UNKNOWN;
+		*type = AKA_SIM_ID_TYPE_UNKNOWN;
 		fr_strerror_printf("ID length too short");
 		return -1;
 	}
@@ -176,15 +178,15 @@ int fr_sim_id_type(fr_sim_id_type_t *type, fr_sim_method_hint_t *hint, char cons
 	 *	entire string if no '@' found, so works with
 	 *	full NAI strings and Stripped-User-Name.
 	 */
-	id_len = fr_sim_id_user_len(id, id_len);
+	id_len = fr_aka_sim_id_user_len(id, id_len);
 
 	/*
 	 *	Permanent ID format check
 	 */
 	switch (id[0]) {
-	case SIM_ID_TAG_PERMANENT_SIM:
-	case SIM_ID_TAG_PERMANENT_AKA:
-	case SIM_ID_TAG_PERMANENT_AKA_PRIME:
+	case ID_TAG_SIM_PERMANENT:
+	case ID_TAG_AKA_PERMANENT:
+	case ID_TAG_AKA_PRIME_PERMANENT:
 		if (id_len > 16) {
 			fr_strerror_printf("IMSI too long, expected <= 16 bytes got %zu bytes", id_len);
 			goto bad_format;
@@ -198,19 +200,19 @@ int fr_sim_id_type(fr_sim_id_type_t *type, fr_sim_method_hint_t *hint, char cons
 		}
 
 		switch (id[0]) {
-		case SIM_ID_TAG_PERMANENT_SIM:
-			*hint = SIM_METHOD_HINT_SIM;
-			*type = SIM_ID_TYPE_PERMANENT;	/* All digits */
+		case ID_TAG_SIM_PERMANENT:
+			*hint = AKA_SIM_METHOD_HINT_SIM;
+			*type = AKA_SIM_ID_TYPE_PERMANENT;	/* All digits */
 			return 0;
 
-		case SIM_ID_TAG_PERMANENT_AKA:
-			*hint = SIM_METHOD_HINT_AKA;
-			*type = SIM_ID_TYPE_PERMANENT;	/* All digits */
+		case ID_TAG_AKA_PERMANENT:
+			*hint = AKA_SIM_METHOD_HINT_AKA;
+			*type = AKA_SIM_ID_TYPE_PERMANENT;	/* All digits */
 			return 0;
 
-		case SIM_ID_TAG_PERMANENT_AKA_PRIME:
-			*hint = SIM_METHOD_HINT_AKA_PRIME;
-			*type = SIM_ID_TYPE_PERMANENT;	/* All Digits */
+		case ID_TAG_AKA_PRIME_PERMANENT:
+			*hint = AKA_SIM_METHOD_HINT_AKA_PRIME;
+			*type = AKA_SIM_ID_TYPE_PERMANENT;	/* All Digits */
 			return 0;
 
 		default:
@@ -226,63 +228,100 @@ bad_format:
 	 *	Pseudonym
 	 */
 	switch (id[0]) {
-	case SIM_ID_TAG_PSEUDONYM_SIM:
-		*hint = SIM_METHOD_HINT_SIM;
-		*type = SIM_ID_TYPE_PSEUDONYM;
+	case ID_TAG_SIM_PSEUDONYM:
+		*hint = AKA_SIM_METHOD_HINT_SIM;
+		*type = AKA_SIM_ID_TYPE_PSEUDONYM;
 		return 0;
 
-	case SIM_ID_TAG_PSEUDONYM_AKA:
-		*hint = SIM_METHOD_HINT_AKA;
-		*type = SIM_ID_TYPE_PSEUDONYM;
+	case ID_TAG_AKA_PSEUDONYM:
+		*hint = AKA_SIM_METHOD_HINT_AKA;
+		*type = AKA_SIM_ID_TYPE_PSEUDONYM;
 		return 0;
 
-	case SIM_ID_TAG_PSEUDONYM_AKA_PRIME:
-		*hint = SIM_METHOD_HINT_AKA_PRIME;
-		*type = SIM_ID_TYPE_PSEUDONYM;
+	case ID_TAG_AKA_PRIME_PSEUDONYM:
+		*hint = AKA_SIM_METHOD_HINT_AKA_PRIME;
+		*type = AKA_SIM_ID_TYPE_PSEUDONYM;
 		return 0;
 
 	/*
 	 *	Fast reauth identity
 	 */
-	case SIM_ID_TAG_FASTAUTH_SIM:
-		*hint = SIM_METHOD_HINT_SIM;
-		*type = SIM_ID_TYPE_FASTAUTH;
+	case ID_TAG_SIM_FASTAUTH:
+		*hint = AKA_SIM_METHOD_HINT_SIM;
+		*type = AKA_SIM_ID_TYPE_FASTAUTH;
 		return 0;
 
-	case SIM_ID_TAG_FASTAUTH_AKA:
-		*hint = SIM_METHOD_HINT_AKA;
-		*type = SIM_ID_TYPE_FASTAUTH;
+	case ID_TAG_AKA_FASTAUTH:
+		*hint = AKA_SIM_METHOD_HINT_AKA;
+		*type = AKA_SIM_ID_TYPE_FASTAUTH;
 		return 0;
 
-	case SIM_ID_TAG_FASTAUTH_AKA_PRIME:
-		*hint = SIM_METHOD_HINT_AKA_PRIME;
-		*type = SIM_ID_TYPE_FASTAUTH;
+	case ID_TAG_AKA_PRIME_FASTAUTH:
+		*hint = AKA_SIM_METHOD_HINT_AKA_PRIME;
+		*type = AKA_SIM_ID_TYPE_FASTAUTH;
 		return 0;
 
-	case SIM_ID_TAG_PERMANENT_SIM:
-		*hint = SIM_METHOD_HINT_UNKNOWN;
-		*type = SIM_ID_TYPE_UNKNOWN;
+	case ID_TAG_SIM_PERMANENT:
+		*hint = AKA_SIM_METHOD_HINT_UNKNOWN;
+		*type = AKA_SIM_ID_TYPE_UNKNOWN;
 		fr_strerror_printf_push("Got SIM-Permanent-ID tag, but identity is not a permanent ID");
 		return -1;
 
-	case SIM_ID_TAG_PERMANENT_AKA:
-		*hint = SIM_METHOD_HINT_UNKNOWN;
-		*type = SIM_ID_TYPE_UNKNOWN;
+	case ID_TAG_AKA_PERMANENT:
+		*hint = AKA_SIM_METHOD_HINT_UNKNOWN;
+		*type = AKA_SIM_ID_TYPE_UNKNOWN;
 		fr_strerror_printf_push("Got AKA-Permanent-ID tag, but identity is not a permanent ID");
 		return -1;
 
 	default:
-		*hint = SIM_METHOD_HINT_UNKNOWN;
-		*type = SIM_ID_TYPE_UNKNOWN;
-		fr_strerror_printf_push("Unrecognised tag '%pV'", fr_box_strvalue_len(id, 1)); /* Have to box, may be \000 */
+		*hint = AKA_SIM_METHOD_HINT_UNKNOWN;
+		*type = AKA_SIM_ID_TYPE_UNKNOWN;
+		fr_strerror_printf_push("Unrecognised tag '%c'", id[0]);
 		return -1;
 	}
+}
+
+static char hint_byte_matrix[AKA_SIM_METHOD_HINT_MAX][AKA_SIM_ID_TYPE_MAX] = {
+	[AKA_SIM_METHOD_HINT_SIM] = {
+		[AKA_SIM_ID_TYPE_PERMANENT]	= ID_TAG_SIM_PERMANENT,
+		[AKA_SIM_ID_TYPE_PSEUDONYM]	= ID_TAG_SIM_PSEUDONYM,
+		[AKA_SIM_ID_TYPE_FASTAUTH]	= ID_TAG_SIM_PERMANENT,
+		[AKA_SIM_ID_TYPE_UNKNOWN]	= '\0',
+	},
+	[AKA_SIM_METHOD_HINT_AKA] = {
+		[AKA_SIM_ID_TYPE_PERMANENT]	= ID_TAG_AKA_PERMANENT,
+		[AKA_SIM_ID_TYPE_PSEUDONYM]	= ID_TAG_AKA_PSEUDONYM,
+		[AKA_SIM_ID_TYPE_FASTAUTH]	= ID_TAG_AKA_PERMANENT,
+		[AKA_SIM_ID_TYPE_UNKNOWN]	= '\0',
+	},
+	[AKA_SIM_METHOD_HINT_AKA_PRIME] = {
+		[AKA_SIM_ID_TYPE_PERMANENT]	= ID_TAG_AKA_PRIME_PERMANENT,
+		[AKA_SIM_ID_TYPE_PSEUDONYM]	= ID_TAG_AKA_PRIME_PSEUDONYM,
+		[AKA_SIM_ID_TYPE_FASTAUTH]	= ID_TAG_AKA_PRIME_PERMANENT,
+		[AKA_SIM_ID_TYPE_UNKNOWN]	= '\0',
+	},
+	[AKA_SIM_METHOD_HINT_UNKNOWN] = {
+		'\0'	/* Should set for all elements */
+	}
+};
+
+/** Return the expected identity hint for a given type/method combination
+ *
+ * @param[in] type	Whether this is a permanent, pseudonym or fastauth ID
+ * @param[in] method	What EAP-Method the identity hints at.
+ * @return
+ *	- An IMSI tag byte [0-9] (ASCII)
+ *	- '\0' if either the method or type values are unknown.
+ */
+char fr_aka_sim_hint_byte(fr_aka_sim_id_type_t type, fr_aka_sim_method_hint_t method)
+{
+	return hint_byte_matrix[method][type];
 }
 
 /** Create a 3gpp pseudonym from a permanent ID
  *
  * @param[out] out	Where to write the resulting pseudonym, must be a buffer of
- *			exactly SIM_3GPP_PSEUDONYM_LEN + 1 bytes.
+ *			exactly AKA_SIM_3GPP_PSEUDONYM_LEN + 1 bytes.
  * @param[in] imsi	Permanent ID to derive pseudonym from.  Note: If the IMSI is less than
  *			15 digits it will be rpadded with zeros.
  * @param[in] imsi_len	Length of the IMSI. Must be between 1-15.
@@ -296,9 +335,9 @@ bad_format:
  *	- 0 on success.
  *	- -1 if any of the parameters were invalid.
  */
-int fr_sim_id_3gpp_pseudonym_encrypt(char out[SIM_3GPP_PSEUDONYM_LEN + 1],
-				     char const *imsi, size_t imsi_len,
-				     uint8_t tag, uint8_t key_ind, uint8_t const key[16])
+int fr_aka_sim_id_3gpp_pseudonym_encrypt(char out[AKA_SIM_3GPP_PSEUDONYM_LEN + 1],
+					 char const *imsi, size_t imsi_len,
+					 uint8_t tag, uint8_t key_ind, uint8_t const key[16])
 {
 	uint8_t		padded[16];				/* Random (8 bytes) + Compressed (8 bytes) */
 	uint8_t		encr[16];				/* aes_ecb(padded) */
@@ -321,7 +360,7 @@ int fr_sim_id_3gpp_pseudonym_encrypt(char out[SIM_3GPP_PSEUDONYM_LEN + 1],
 		fr_strerror_printf("Invalid tag value, expected value between 0-63, got %u", tag);
 		return -1;
 	}
-	if (unlikely(imsi_len != SIM_IMSI_MAX_LEN)) {
+	if (unlikely(imsi_len != AKA_SIM_IMSI_MAX_LEN)) {
 		fr_strerror_printf("Invalid ID len, expected length of 15, got %zu", imsi_len);
 		return -1;
 	}
@@ -435,13 +474,13 @@ int fr_sim_id_3gpp_pseudonym_encrypt(char out[SIM_3GPP_PSEUDONYM_LEN + 1],
 		*out_p++ = fr_base64_str[u_p[2] & 0x3f];					/* 6 low bits of p[2] */
 		u_p += 3;
 	}
-	if ((out_p - out) != SIM_3GPP_PSEUDONYM_LEN) {
+	if ((out_p - out) != AKA_SIM_3GPP_PSEUDONYM_LEN) {
 		fr_strerror_printf("Base64 output length invalid, expected %i bytes, got %zu bytes",
-				   SIM_3GPP_PSEUDONYM_LEN, out_p - out);
+				   AKA_SIM_3GPP_PSEUDONYM_LEN, out_p - out);
 		return -1;
 	}
 
-	out[SIM_3GPP_PSEUDONYM_LEN] = '\0';
+	out[AKA_SIM_3GPP_PSEUDONYM_LEN] = '\0';
 
 	return 0;
 }
@@ -452,7 +491,7 @@ int fr_sim_id_3gpp_pseudonym_encrypt(char out[SIM_3GPP_PSEUDONYM_LEN + 1],
  *
  * @return the tag associated with the pseudonym.
  */
-uint8_t fr_sim_id_3gpp_pseudonym_tag(char const encr_id[SIM_3GPP_PSEUDONYM_LEN])
+uint8_t fr_aka_sim_id_3gpp_pseudonym_tag(char const encr_id[AKA_SIM_3GPP_PSEUDONYM_LEN])
 {
 	return fr_base64_sextet[us(encr_id[0])];
 }
@@ -463,7 +502,7 @@ uint8_t fr_sim_id_3gpp_pseudonym_tag(char const encr_id[SIM_3GPP_PSEUDONYM_LEN])
  *
  * @return the key index associated with the pseudonym.
  */
-uint8_t fr_sim_id_3gpp_pseudonym_key_index(char const encr_id[SIM_3GPP_PSEUDONYM_LEN])
+uint8_t fr_aka_sim_id_3gpp_pseudonym_key_index(char const encr_id[AKA_SIM_3GPP_PSEUDONYM_LEN])
 {
 	return ((fr_base64_sextet[us(encr_id[1])] & 0x3c) >> 2);
 }
@@ -478,8 +517,8 @@ uint8_t fr_sim_id_3gpp_pseudonym_key_index(char const encr_id[SIM_3GPP_PSEUDONYM
  *	- 0 on success.
  *	- -1 if any of the parameters were invalid.
  */
-int fr_sim_id_3gpp_pseudonym_decrypt(char out[SIM_IMSI_MAX_LEN + 1],
-				     char const encr_id[SIM_3GPP_PSEUDONYM_LEN], uint8_t const key[16])
+int fr_aka_sim_id_3gpp_pseudonym_decrypt(char out[AKA_SIM_IMSI_MAX_LEN + 1],
+				     char const encr_id[AKA_SIM_3GPP_PSEUDONYM_LEN], uint8_t const key[16])
 {
 	EVP_CIPHER_CTX	*evp_ctx;
 
@@ -492,12 +531,12 @@ int fr_sim_id_3gpp_pseudonym_decrypt(char out[SIM_IMSI_MAX_LEN + 1],
 	uint8_t		*compressed = decr + 8;		/* Pointer into plaintext after the random component */
 	size_t		decr_len;
 
-	char const	*p = encr_id, *end = p + SIM_3GPP_PSEUDONYM_LEN;
+	char const	*p = encr_id, *end = p + AKA_SIM_3GPP_PSEUDONYM_LEN;
 
 	size_t		len = 0;
 	int		i;
 
-	for (i = 0; i < SIM_3GPP_PSEUDONYM_LEN; i++) {
+	for (i = 0; i < AKA_SIM_3GPP_PSEUDONYM_LEN; i++) {
 		if (!fr_is_base64(encr_id[i])) {
 			fr_strerror_printf("Encrypted IMSI contains non-base64 char '%c'", encr_id[i]);
 			return -1;
@@ -554,9 +593,9 @@ int fr_sim_id_3gpp_pseudonym_decrypt(char out[SIM_IMSI_MAX_LEN + 1],
 	 *	This should never happen, and probably means that
 	 *	some sort of memory corruption has occured.
 	 */
-	if (unlikely(decr_len > (SIM_IMSI_MAX_LEN + 1))) {
+	if (unlikely(decr_len > (AKA_SIM_IMSI_MAX_LEN + 1))) {
 		fr_strerror_printf("Decrypted data len invalid.  Expected %i bytes, got %zu bytes",
-				   (SIM_IMSI_MAX_LEN + 1), decr_len);
+				   (AKA_SIM_IMSI_MAX_LEN + 1), decr_len);
 		goto error;
 	}
 
@@ -574,7 +613,7 @@ int fr_sim_id_3gpp_pseudonym_decrypt(char out[SIM_IMSI_MAX_LEN + 1],
 
 	EVP_CIPHER_CTX_free(evp_ctx);
 
-	out[SIM_IMSI_MAX_LEN] = '\0';
+	out[AKA_SIM_IMSI_MAX_LEN] = '\0';
 
 	return 0;
 }
@@ -595,20 +634,20 @@ void test_encrypt_decypt_key0(void)
 	uint8_t		key_ind;
 	char const	*log;
 
-	char		encrypted_id[SIM_3GPP_PSEUDONYM_LEN + 1];
+	char		encrypted_id[AKA_SIM_3GPP_PSEUDONYM_LEN + 1];
 	char		decrypted_id[sizeof(id)];
 
 	fr_log_fp = stdout;
 
-	TEST_CHECK(fr_sim_id_3gpp_pseudonym_encrypt(encrypted_id, id, sizeof(id) - 1, 6, 0, (uint8_t const *)key) == 0);
+	TEST_CHECK(fr_aka_sim_id_3gpp_pseudonym_encrypt(encrypted_id, id, sizeof(id) - 1, 6, 0, (uint8_t const *)key) == 0);
 	while ((log = fr_strerror_pop())) printf("%s\n", log);
 
-	tag = fr_sim_id_3gpp_pseudonym_tag(encrypted_id);
+	tag = fr_aka_sim_id_3gpp_pseudonym_tag(encrypted_id);
 	TEST_CHECK(tag == 6);
-	key_ind = fr_sim_id_3gpp_pseudonym_key_index(encrypted_id);
+	key_ind = fr_aka_sim_id_3gpp_pseudonym_key_index(encrypted_id);
 	TEST_CHECK(key_ind == 0);
 
-	TEST_CHECK(fr_sim_id_3gpp_pseudonym_decrypt(decrypted_id, encrypted_id, (uint8_t const *)key) == 0);
+	TEST_CHECK(fr_aka_sim_id_3gpp_pseudonym_decrypt(decrypted_id, encrypted_id, (uint8_t const *)key) == 0);
 	while ((log = fr_strerror_pop())) printf("%s\n", log);
 
 	TEST_CHECK(memcmp(id, decrypted_id, 15) == 0);
@@ -622,20 +661,20 @@ void test_encrypt_decypt_key1(void)
 	uint8_t		key_ind;
 	char const	*log;
 
-	char		encrypted_id[SIM_3GPP_PSEUDONYM_LEN + 1];
+	char		encrypted_id[AKA_SIM_3GPP_PSEUDONYM_LEN + 1];
 	char		decrypted_id[sizeof(id)];
 
 	fr_log_fp = stdout;
 
-	TEST_CHECK(fr_sim_id_3gpp_pseudonym_encrypt(encrypted_id, id, sizeof(id) - 1, 11, 1, (uint8_t const *)key) == 0);
+	TEST_CHECK(fr_aka_sim_id_3gpp_pseudonym_encrypt(encrypted_id, id, sizeof(id) - 1, 11, 1, (uint8_t const *)key) == 0);
 	while ((log = fr_strerror_pop())) printf("%s\n", log);
 
-	tag = fr_sim_id_3gpp_pseudonym_tag(encrypted_id);
+	tag = fr_aka_sim_id_3gpp_pseudonym_tag(encrypted_id);
 	TEST_CHECK(tag == 11);
-	key_ind = fr_sim_id_3gpp_pseudonym_key_index(encrypted_id);
+	key_ind = fr_aka_sim_id_3gpp_pseudonym_key_index(encrypted_id);
 	TEST_CHECK(key_ind == 1);
 
-	TEST_CHECK(fr_sim_id_3gpp_pseudonym_decrypt(decrypted_id, encrypted_id, (uint8_t const *)key) == 0);
+	TEST_CHECK(fr_aka_sim_id_3gpp_pseudonym_decrypt(decrypted_id, encrypted_id, (uint8_t const *)key) == 0);
 	while ((log = fr_strerror_pop())) printf("%s\n", log);
 
 	TEST_CHECK(memcmp(id, decrypted_id, 15) == 0);
@@ -667,21 +706,21 @@ void test_encrypt_decypt_key16(void)
 	uint8_t		key_ind;
 	char const	*log;
 
-	char		encrypted_id[SIM_3GPP_PSEUDONYM_LEN + 1];
+	char		encrypted_id[AKA_SIM_3GPP_PSEUDONYM_LEN + 1];
 	char		decrypted_id[sizeof(id)];
 
 	fr_log_fp = stdout;
 
-	TEST_CHECK(fr_sim_id_3gpp_pseudonym_encrypt(encrypted_id, id, sizeof(id) - 1,
+	TEST_CHECK(fr_aka_sim_id_3gpp_pseudonym_encrypt(encrypted_id, id, sizeof(id) - 1,
 						    9, 15, (uint8_t const *)keys[15]) == 0);
 	while ((log = fr_strerror_pop())) printf("%s\n", log);
 
-	tag = fr_sim_id_3gpp_pseudonym_tag(encrypted_id);
+	tag = fr_aka_sim_id_3gpp_pseudonym_tag(encrypted_id);
 	TEST_CHECK(tag == 9);
-	key_ind = fr_sim_id_3gpp_pseudonym_key_index(encrypted_id);
+	key_ind = fr_aka_sim_id_3gpp_pseudonym_key_index(encrypted_id);
 	TEST_CHECK(key_ind == 15);
 
-	TEST_CHECK(fr_sim_id_3gpp_pseudonym_decrypt(decrypted_id, encrypted_id, (uint8_t const *)keys[key_ind]) == 0);
+	TEST_CHECK(fr_aka_sim_id_3gpp_pseudonym_decrypt(decrypted_id, encrypted_id, (uint8_t const *)keys[key_ind]) == 0);
 	while ((log = fr_strerror_pop())) printf("%s\n", log);
 
 	TEST_CHECK(memcmp(id, decrypted_id, 15) == 0);

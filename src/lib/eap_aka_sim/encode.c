@@ -15,7 +15,7 @@
  */
 
 /**
- * @file src/lib/sim/encode.c
+ * @file src/lib/aka-sim/encode.c
  * @brief Code common to EAP-SIM/AKA/AKA' clients and servers.
  *
  * @copyright 2017 FreeRADIUS server project
@@ -31,7 +31,6 @@ RCSID("$Id$")
 #include <freeradius-devel/io/test_point.h>
 
 #include <freeradius-devel/eap/types.h>
-#include "eap_sim_common.h"
 #include "base.h"
 #include "sim_attrs.h"
 
@@ -82,7 +81,7 @@ static inline bool is_encodable(fr_dict_attr_t const *root, VALUE_PAIR *vp)
 static inline VALUE_PAIR *next_encodable(fr_cursor_t *cursor, void *encoder_ctx)
 {
 	VALUE_PAIR		*vp;
-	fr_sim_encode_ctx_t	*packet_ctx = encoder_ctx;
+	fr_aka_sim_encode_ctx_t	*packet_ctx = encoder_ctx;
 
 	while ((vp = fr_cursor_next(cursor))) if (is_encodable(packet_ctx->root, vp)) break;
 	return fr_cursor_current(cursor);
@@ -97,7 +96,7 @@ static inline VALUE_PAIR *next_encodable(fr_cursor_t *cursor, void *encoder_ctx)
 static inline VALUE_PAIR *first_encodable(fr_cursor_t *cursor, void *encoder_ctx)
 {
 	VALUE_PAIR		*vp;
-	fr_sim_encode_ctx_t	*packet_ctx = encoder_ctx;
+	fr_aka_sim_encode_ctx_t	*packet_ctx = encoder_ctx;
 
 	vp = fr_cursor_current(cursor);
 	if (is_encodable(packet_ctx->root, vp)) return vp;
@@ -122,7 +121,7 @@ static inline VALUE_PAIR *first_encodable(fr_cursor_t *cursor, void *encoder_ctx
  */
 static ssize_t encode_iv(uint8_t *out, size_t outlen, void *encoder_ctx)
 {
-	fr_sim_encode_ctx_t	*packet_ctx = encoder_ctx;
+	fr_aka_sim_encode_ctx_t	*packet_ctx = encoder_ctx;
 	uint8_t			*p = out;
 	uint32_t		iv[4];
 
@@ -131,7 +130,7 @@ static ssize_t encode_iv(uint8_t *out, size_t outlen, void *encoder_ctx)
 	 */
 	if (packet_ctx->iv_included) return 0;
 
-	CHECK_FREESPACE(outlen, 4 + SIM_IV_SIZE);	/* AT_IV + Length + Reserved(2) + IV */
+	CHECK_FREESPACE(outlen, 4 + AKA_SIM_IV_SIZE);	/* AT_IV + Length + Reserved(2) + IV */
 
 	/*
 	 *	Generate IV
@@ -143,8 +142,8 @@ static ssize_t encode_iv(uint8_t *out, size_t outlen, void *encoder_ctx)
 
 	memcpy(packet_ctx->iv, (uint8_t *)&iv[0], sizeof(packet_ctx->iv));	/* ensures alignment */
 
-	*p++ = FR_SIM_IV;
-	*p++ = (4 + SIM_IV_SIZE) >> 2;
+	*p++ = FR_IV;
+	*p++ = (4 + AKA_SIM_IV_SIZE) >> 2;
 	*p++ = 0;
 	*p++ = 0;
 	memcpy(p, packet_ctx->iv, sizeof(packet_ctx->iv));
@@ -182,7 +181,7 @@ static ssize_t encode_encrypted_value(uint8_t *out, size_t outlen,
 {
 	size_t			total_len, pad_len, encr_len, len = 0;
 	uint8_t			*p = out, *encr = NULL;
-	fr_sim_encode_ctx_t	*packet_ctx = encoder_ctx;
+	fr_aka_sim_encode_ctx_t	*packet_ctx = encoder_ctx;
 	EVP_CIPHER_CTX		*evp_ctx;
 	EVP_CIPHER const	*evp_cipher = EVP_aes_128_cbc();
 	size_t			block_size = EVP_CIPHER_block_size(evp_cipher);
@@ -211,7 +210,7 @@ static ssize_t encode_encrypted_value(uint8_t *out, size_t outlen,
 	 *	Append an AT_PADDING attribute if required
 	 */
 	if (pad_len != 0) {
-		p[0] = FR_SIM_PADDING;
+		p[0] = FR_PADDING;
 		p[1] = pad_len >> 2;
 		memset(p + 2, 0, pad_len - 2);	/* Ensure the rest is zeroed out */
 		FR_PROTO_HEX_DUMP(p, pad_len, "Done padding attribute");
@@ -302,7 +301,7 @@ static ssize_t encode_value(uint8_t *out, size_t outlen,
 	ssize_t			len;
 	VALUE_PAIR const	*vp = fr_cursor_current(cursor);
 	fr_dict_attr_t const	*da = tlv_stack[depth];
-	fr_sim_encode_ctx_t	*packet_ctx = encoder_ctx;
+	fr_aka_sim_encode_ctx_t	*packet_ctx = encoder_ctx;
 
 	VP_VERIFY(vp);
 	FR_PROTO_STACK_PRINT(tlv_stack, depth);
@@ -342,7 +341,7 @@ static ssize_t encode_value(uint8_t *out, size_t outlen,
 	 *	|                                                               |
 	 *	+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 	 */
-	case FR_SIM_IV:
+	case FR_IV:
 		if ((vp->da->flags.length && (da->flags.length != vp->vp_length)) ||
 		    (vp->vp_length != sizeof(packet_ctx->iv))) {
 			fr_strerror_printf("%s: Attribute \"%s\" needs a value of exactly %zu bytes, "
@@ -368,7 +367,7 @@ static ssize_t encode_value(uint8_t *out, size_t outlen,
 	 *	|                                                               |
 	 *	+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 	 */
-	case FR_EAP_AKA_RES:
+	case FR_RES:
 	{
 		uint16_t	res_len = htons(vp->vp_length * 8);	/* Get length in bits */
 
@@ -407,7 +406,7 @@ static ssize_t encode_value(uint8_t *out, size_t outlen,
 	 *	|                                                               |
 	 *	+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 	 */
-	case FR_EAP_AKA_CHECKCODE:
+	case FR_CHECKCODE:
 	{
 		uint8_t	*p = out;
 
@@ -477,7 +476,7 @@ static ssize_t encode_value(uint8_t *out, size_t outlen,
 		 *	Fixed length attribute
 		 */
 		if (vp->da->flags.length) {
-			size_t prefix = fr_sim_octets_prefix_len(vp->da);
+			size_t prefix = fr_aka_sim_octets_prefix_len(vp->da);
 			size_t pad_len;
 			size_t value_len_rounded;
 
@@ -630,7 +629,7 @@ static ssize_t encode_array(uint8_t *out, size_t outlen,
 		}
 		element_len = da->flags.length;
 	} else {
-		element_len = fr_sim_attr_sizes[da->type][0];
+		element_len = fr_aka_sim_attr_sizes[da->type][0];
 	}
 
 	/*
@@ -877,7 +876,7 @@ static ssize_t encode_tlv_hdr(uint8_t *out, size_t outlen,
 	return p - out;	/* AT_IV + AT_*(TLV) - Can't use total_len, doesn't include IV */
 }
 
-ssize_t fr_sim_encode_pair(uint8_t *out, size_t outlen, fr_cursor_t *cursor, void *encoder_ctx)
+ssize_t fr_aka_sim_encode_pair(uint8_t *out, size_t outlen, fr_cursor_t *cursor, void *encoder_ctx)
 {
 	VALUE_PAIR const	*vp;
 	ssize_t			slen;
@@ -885,7 +884,7 @@ ssize_t fr_sim_encode_pair(uint8_t *out, size_t outlen, fr_cursor_t *cursor, voi
 
 	fr_dict_attr_t const	*tlv_stack[FR_DICT_MAX_TLV_STACK + 1];
 	fr_dict_attr_t const	*da = NULL;
-	fr_sim_encode_ctx_t	*packet_ctx = encoder_ctx;
+	fr_aka_sim_encode_ctx_t	*packet_ctx = encoder_ctx;
 
 	if (!cursor || !out) return PAIR_ENCODE_ERROR;
 
@@ -902,7 +901,7 @@ ssize_t fr_sim_encode_pair(uint8_t *out, size_t outlen, fr_cursor_t *cursor, voi
 		return PAIR_ENCODE_ERROR;
 	}
 
-	if (vp->da->attr == FR_SIM_MAC) {
+	if (vp->da->attr == FR_MAC) {
 		next_encodable(cursor, encoder_ctx);
 		return 0;
 	}
@@ -957,7 +956,7 @@ ssize_t fr_sim_encode_pair(uint8_t *out, size_t outlen, fr_cursor_t *cursor, voi
 	return slen;
 }
 
-ssize_t fr_sim_encode(REQUEST *request, VALUE_PAIR *to_encode, void *encode_ctx)
+ssize_t fr_aka_sim_encode(REQUEST *request, VALUE_PAIR *to_encode, void *encode_ctx)
 {
 	VALUE_PAIR		*vp;
 
@@ -969,7 +968,7 @@ ssize_t fr_sim_encode(REQUEST *request, VALUE_PAIR *to_encode, void *encode_ctx)
 
 	unsigned char		subtype;
 	fr_cursor_t		cursor;
-	fr_sim_encode_ctx_t	*packet_ctx = encode_ctx;
+	fr_aka_sim_encode_ctx_t	*packet_ctx = encode_ctx;
 	eap_packet_t		*eap_packet = packet_ctx->eap_packet;
 
 	/*
@@ -977,7 +976,7 @@ ssize_t fr_sim_encode(REQUEST *request, VALUE_PAIR *to_encode, void *encode_ctx)
 	 *	It might be too big for putting into an
 	 *	EAP packet.
 	 */
-	vp = fr_pair_find_by_child_num(to_encode, packet_ctx->root, FR_SIM_SUBTYPE, TAG_ANY);
+	vp = fr_pair_find_by_child_num(to_encode, packet_ctx->root, FR_SUBTYPE, TAG_ANY);
 	if (!vp) {
 		REDEBUG("Missing subtype attribute");
 		return PAIR_ENCODE_ERROR;
@@ -993,7 +992,7 @@ ssize_t fr_sim_encode(REQUEST *request, VALUE_PAIR *to_encode, void *encode_ctx)
 	/*
 	 *	Will we need to generate a HMAC?
 	 */
-	if (fr_pair_find_by_child_num(to_encode, packet_ctx->root, FR_EAP_SIM_MAC, TAG_ANY)) do_hmac = true;
+	if (fr_pair_find_by_child_num(to_encode, packet_ctx->root, FR_MAC, TAG_ANY)) do_hmac = true;
 
 	/*
 	 *	Fast path, we just need to encode a subtype
@@ -1025,10 +1024,10 @@ ssize_t fr_sim_encode(REQUEST *request, VALUE_PAIR *to_encode, void *encode_ctx)
 	 *	Add space in the packet for AT_MAC
 	 */
 	if (do_hmac) {
-		CHECK_FREESPACE(end - p, SIM_MAC_SIZE);
+		CHECK_FREESPACE(end - p, AKA_SIM_MAC_SIZE);
 
-		*p++ = FR_SIM_MAC;
-		*p++ = (SIM_MAC_SIZE >> 2);
+		*p++ = FR_MAC;
+		*p++ = (AKA_SIM_MAC_SIZE >> 2);
 		*p++ = 0x00;
 		*p++ = 0x00;
 		hmac = p;
@@ -1041,7 +1040,7 @@ ssize_t fr_sim_encode(REQUEST *request, VALUE_PAIR *to_encode, void *encode_ctx)
 	 */
 	(void)fr_cursor_head(&cursor);
 	while ((vp = fr_cursor_current(&cursor))) {
-		slen = fr_sim_encode_pair(p, end - p, &cursor, packet_ctx);
+		slen = fr_aka_sim_encode_pair(p, end - p, &cursor, packet_ctx);
 		if (slen < 0) {
 		error:
 			talloc_free(buff);
@@ -1058,12 +1057,12 @@ ssize_t fr_sim_encode(REQUEST *request, VALUE_PAIR *to_encode, void *encode_ctx)
 	 *	Calculate a SHA1-HMAC over the complete EAP packet
 	 */
 	if (do_hmac) {
-		slen = fr_sim_crypto_sign_packet(hmac, eap_packet, false,
+		slen = fr_aka_sim_crypto_sign_packet(hmac, eap_packet, false,
 						 packet_ctx->hmac_md,
 						 packet_ctx->keys->k_aut, packet_ctx->keys->k_aut_len,
 						 packet_ctx->hmac_extra, packet_ctx->hmac_extra_len);
 		if (slen < 0) goto error;
-		FR_PROTO_HEX_DUMP(hmac - 4, SIM_MAC_SIZE, "hmac attribute");
+		FR_PROTO_HEX_DUMP(hmac - 4, AKA_SIM_MAC_SIZE, "hmac attribute");
 	}
 	FR_PROTO_HEX_DUMP(buff, eap_packet->type.length, "sim packet");
 
@@ -1085,24 +1084,24 @@ ssize_t fr_sim_encode(REQUEST *request, VALUE_PAIR *to_encode, void *encode_ctx)
 /*
  *	Test ctx data
  */
-static int _test_ctx_free(UNUSED fr_sim_encode_ctx_t *ctx)
+static int _test_ctx_free(UNUSED fr_aka_sim_encode_ctx_t *ctx)
 {
-	fr_sim_free();
+	fr_aka_sim_free();
 
 	return 0;
 }
 
-static fr_sim_encode_ctx_t *test_ctx_init(TALLOC_CTX *ctx, uint8_t const *k_encr, size_t k_encr_len)
+static fr_aka_sim_encode_ctx_t *test_ctx_init(TALLOC_CTX *ctx, uint8_t const *k_encr, size_t k_encr_len)
 {
-	fr_sim_encode_ctx_t	*test_ctx;
-	fr_sim_keys_t		*keys;
+	fr_aka_sim_encode_ctx_t	*test_ctx;
+	fr_aka_sim_keys_t		*keys;
 
-	test_ctx = talloc_zero(ctx, fr_sim_encode_ctx_t);
-	test_ctx->keys = keys = talloc_zero(test_ctx, fr_sim_keys_t);
+	test_ctx = talloc_zero(ctx, fr_aka_sim_encode_ctx_t);
+	test_ctx->keys = keys = talloc_zero(test_ctx, fr_aka_sim_keys_t);
 	memcpy(keys->k_encr, k_encr, k_encr_len);
 	talloc_set_destructor(test_ctx, _test_ctx_free);
 
-	if (fr_sim_init() < 0) return NULL;
+	if (fr_aka_sim_init() < 0) return NULL;
 
 	return test_ctx;
 }
@@ -1112,14 +1111,14 @@ static fr_sim_encode_ctx_t *test_ctx_init(TALLOC_CTX *ctx, uint8_t const *k_encr
  */
 static int encode_test_ctx_sim(void **out, TALLOC_CTX *ctx)
 {
-	fr_sim_encode_ctx_t	*test_ctx;
+	fr_aka_sim_encode_ctx_t	*test_ctx;
 	static uint8_t		k_encr[] = { 0x00, 0x01, 0x02, 0x03, 0x04 ,0x05, 0x06, 0x07,
 					     0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f };
 
 	test_ctx = test_ctx_init(ctx, k_encr, sizeof(k_encr));
 	if (!test_ctx) return -1;
 
-	test_ctx->root = fr_dict_root(dict_eap_sim);
+	test_ctx->root = fr_dict_root(dict_eap_aka_sim);
 	test_ctx->iv_included = true;	/* Ensures IV is all zeros */
 
 	*out = test_ctx;
@@ -1129,14 +1128,14 @@ static int encode_test_ctx_sim(void **out, TALLOC_CTX *ctx)
 
 static int encode_test_ctx_aka(void **out, TALLOC_CTX *ctx)
 {
-	fr_sim_encode_ctx_t	*test_ctx;
+	fr_aka_sim_encode_ctx_t	*test_ctx;
 	static uint8_t		k_encr[] = { 0x00, 0x01, 0x02, 0x03, 0x04 ,0x05, 0x06, 0x07,
 					     0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f };
 
 	test_ctx = test_ctx_init(ctx, k_encr, sizeof(k_encr));
 	if (!test_ctx) return -1;
 
-	test_ctx->root = fr_dict_root(dict_eap_aka);
+	test_ctx->root = fr_dict_root(dict_eap_aka_sim);
 	test_ctx->iv_included = true;	/* Ensures IV is all zeros */
 
 	*out = test_ctx;
@@ -1146,14 +1145,14 @@ static int encode_test_ctx_aka(void **out, TALLOC_CTX *ctx)
 
 static int encode_test_ctx_sim_rfc4186(void **out, TALLOC_CTX *ctx)
 {
-	fr_sim_encode_ctx_t	*test_ctx;
+	fr_aka_sim_encode_ctx_t	*test_ctx;
 	static uint8_t		k_encr[] = { 0x53, 0x6e, 0x5e, 0xbc, 0x44 ,0x65, 0x58, 0x2a,
 					     0xa6, 0xa8, 0xec, 0x99, 0x86, 0xeb, 0xb6, 0x20 };
 
 	test_ctx = test_ctx_init(ctx, k_encr, sizeof(k_encr));
 	if (!test_ctx) return -1;
 
-	test_ctx->root = fr_dict_root(dict_eap_sim);
+	test_ctx->root = fr_dict_root(dict_eap_aka_sim);
 
 	*out = test_ctx;
 
@@ -1166,17 +1165,17 @@ static int encode_test_ctx_sim_rfc4186(void **out, TALLOC_CTX *ctx)
 extern fr_test_point_pair_encode_t sim_tp_encode;
 fr_test_point_pair_encode_t sim_tp_encode = {
 	.test_ctx	= encode_test_ctx_sim,
-	.func		= fr_sim_encode_pair
+	.func		= fr_aka_sim_encode_pair
 };
 
 extern fr_test_point_pair_encode_t aka_tp_encode;
 fr_test_point_pair_encode_t aka_tp_encode = {
 	.test_ctx	= encode_test_ctx_aka,
-	.func		= fr_sim_encode_pair
+	.func		= fr_aka_sim_encode_pair
 };
 
 extern fr_test_point_pair_encode_t sim_tp_encode_rfc4186;
 fr_test_point_pair_encode_t sim_tp_encode_rfc4186 = {
 	.test_ctx	= encode_test_ctx_sim_rfc4186,
-	.func		= fr_sim_encode_pair
+	.func		= fr_aka_sim_encode_pair
 };

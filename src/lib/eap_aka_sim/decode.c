@@ -15,7 +15,7 @@
  */
 
 /**
- * @file src/lib/sim/decode.c
+ * @file src/lib/aka-sim/decode.c
  * @brief Code common to EAP-SIM/AKA/AKA' clients and servers.
  *
  * The development of the EAP-SIM support was funded by Internet Foundation
@@ -35,7 +35,6 @@ RCSID("$Id$")
 #include <freeradius-devel/io/test_point.h>
 
 #include <freeradius-devel/eap/types.h>
-#include "eap_sim_common.h"
 #include "base.h"
 #include "sim_attrs.h"
 
@@ -76,16 +75,16 @@ static ssize_t sim_decode_pair_value(TALLOC_CTX *ctx, fr_cursor_t *cursor, fr_di
  *	- 0 on success.
  *	- < 0 on failure (bad IV).
  */
-static inline int sim_iv_extract(uint8_t out[SIM_IV_SIZE], uint8_t const *in, size_t in_len)
+static inline int sim_iv_extract(uint8_t out[AKA_SIM_IV_SIZE], uint8_t const *in, size_t in_len)
 {
 	/*
 	 *	Two bytes are reserved, so although
 	 *	the IV is actually 16 bytes, we
 	 *	check for 18.
 	 */
-	if (in_len != (SIM_IV_SIZE + 2)) {
+	if (in_len != (AKA_SIM_IV_SIZE + 2)) {
 		fr_strerror_printf("%s: Invalid IV length, expected %u got %zu",
-				   __FUNCTION__, (SIM_IV_SIZE + 2), in_len);
+				   __FUNCTION__, (AKA_SIM_IV_SIZE + 2), in_len);
 		return -1;
 	}
 
@@ -95,7 +94,7 @@ static inline int sim_iv_extract(uint8_t out[SIM_IV_SIZE], uint8_t const *in, si
 	}
 
 	/* skip reserved bytes */
-	memcpy(out, in + 2, SIM_IV_SIZE);
+	memcpy(out, in + 2, AKA_SIM_IV_SIZE);
 
 	return 0;
 }
@@ -116,7 +115,7 @@ static ssize_t sim_value_decrypt(TALLOC_CTX *ctx, uint8_t **out,
 				 uint8_t const *data, size_t const attr_len, size_t const data_len,
 				 void *decoder_ctx)
 {
-	fr_sim_decode_ctx_t	*packet_ctx = decoder_ctx;
+	fr_aka_sim_decode_ctx_t	*packet_ctx = decoder_ctx;
 	EVP_CIPHER_CTX		*evp_ctx;
 	EVP_CIPHER const	*evp_cipher = EVP_aes_128_cbc();
 	size_t			block_size = EVP_CIPHER_block_size(evp_cipher);
@@ -160,7 +159,7 @@ static ssize_t sim_value_decrypt(TALLOC_CTX *ctx, uint8_t **out,
 				return -1;
 			}
 
-			if (sim_at == FR_SIM_IV) {
+			if (sim_at == FR_IV) {
 				if (sim_iv_extract(&(packet_ctx->iv[0]), p + 2, sim_at_len - 2) < 0) return -1;
 				packet_ctx->have_iv = true;
 				break;
@@ -267,7 +266,7 @@ static int sim_array_members(size_t *out, size_t len, fr_dict_attr_t const *da)
 		break;
 
 	default:
-		element_len = fr_sim_attr_sizes[da->type][0];
+		element_len = fr_aka_sim_attr_sizes[da->type][0];
 		break;
 	}
 
@@ -439,7 +438,7 @@ static ssize_t sim_decode_tlv(TALLOC_CTX *ctx, fr_cursor_t *cursor,
 		 *	correct length for the block cipher
 		 *	(16 in the case of AES-128-CBC).
 		 */
-		if (sim_at == FR_SIM_PADDING) {
+		if (sim_at == FR_PADDING) {
 			uint8_t zero = 0;
 			uint8_t i;
 
@@ -458,7 +457,7 @@ static ssize_t sim_decode_tlv(TALLOC_CTX *ctx, fr_cursor_t *cursor,
 			}
 
 			/*
-			 *	RFC says we MUST verify that FR_SIM_PADDING
+			 *	RFC says we MUST verify that FR_PADDING
 			 *	data is zeroed out.
 			 */
 			for (i = 2; i < sim_at_len; i++) zero |= p[i];
@@ -484,7 +483,7 @@ static ssize_t sim_decode_tlv(TALLOC_CTX *ctx, fr_cursor_t *cursor,
 			 *	RFC says we need to die on these if we don't
 			 *	understand them.  non-skippables are < 128.
 			 */
-			if (sim_at <= SIM_SKIPPABLE_MAX) {
+			if (sim_at <= AKA_SIM_SKIPPABLE_MAX) {
 				fr_strerror_printf("%s: Unknown (non-skippable) attribute %i",
 						   __FUNCTION__, sim_at);
 				goto error;
@@ -534,7 +533,7 @@ static ssize_t sim_decode_pair_value(TALLOC_CTX *ctx, fr_cursor_t *cursor, fr_di
 	uint8_t const		*p = data;
 	size_t			prefix = 0;
 
-	fr_sim_decode_ctx_t	*packet_ctx = decoder_ctx;
+	fr_aka_sim_decode_ctx_t	*packet_ctx = decoder_ctx;
 
 	if (!fr_cond_assert(attr_len <= data_len)) return -1;
 	if (!fr_cond_assert(parent)) return -1;
@@ -567,7 +566,7 @@ static ssize_t sim_decode_pair_value(TALLOC_CTX *ctx, fr_cursor_t *cursor, fr_di
 	 *	|                                                               |
 	 *	+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 	 */
-	case FR_SIM_IV:
+	case FR_IV:
 		if (sim_iv_extract(&packet_ctx->iv[0], data, attr_len) < 0) return -1;
 		packet_ctx->have_iv = true;
 		break;	/* Now create the attribute */
@@ -586,7 +585,7 @@ static ssize_t sim_decode_pair_value(TALLOC_CTX *ctx, fr_cursor_t *cursor, fr_di
 	 *	|                                                               |
 	 *	+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 	 */
-	case FR_EAP_AKA_RES:
+	case FR_RES:
 	{
 		uint16_t res_len;
 
@@ -634,7 +633,7 @@ static ssize_t sim_decode_pair_value(TALLOC_CTX *ctx, fr_cursor_t *cursor, fr_di
 	 *	|                                                               |
 	 *	+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 	 */
-	case FR_EAP_AKA_CHECKCODE:
+	case FR_CHECKCODE:
 		if (attr_len < 2) goto raw;	/* Need at least two bytes for reserved field */
 
 		vp = fr_pair_afrom_da(ctx, parent);
@@ -663,7 +662,7 @@ static ssize_t sim_decode_pair_value(TALLOC_CTX *ctx, fr_cursor_t *cursor, fr_di
 		/*
 		 *	Get the number of bytes we expect before the value
 		 */
-		prefix = fr_sim_octets_prefix_len(parent);
+		prefix = fr_aka_sim_octets_prefix_len(parent);
 		if (attr_len < prefix) goto raw;
 		if (parent->flags.length && (attr_len != (parent->flags.length + prefix))) goto wrong_len;
 		break;
@@ -673,7 +672,7 @@ static ssize_t sim_decode_pair_value(TALLOC_CTX *ctx, fr_cursor_t *cursor, fr_di
 	case FR_TYPE_UINT16:
 	case FR_TYPE_UINT32:
 	case FR_TYPE_UINT64:
-		if (attr_len != fr_sim_attr_sizes[parent->type][0]) goto raw;
+		if (attr_len != fr_aka_sim_attr_sizes[parent->type][0]) goto raw;
 		break;
 
 	case FR_TYPE_TLV:
@@ -692,7 +691,7 @@ static ssize_t sim_decode_pair_value(TALLOC_CTX *ctx, fr_cursor_t *cursor, fr_di
 		 *	We can't create unknowns for non-skippable attributes
 		 *	as we're prohibited from continuing by the SIM RFCs.
 		 */
-		if (parent->attr <= SIM_SKIPPABLE_MAX) {
+		if (parent->attr <= AKA_SIM_SKIPPABLE_MAX) {
 			fr_strerror_printf_push("%s: Failed parsing non-skippable attribute '%s'",
 						__FUNCTION__, parent->name);
 			return -1;
@@ -894,7 +893,7 @@ static ssize_t sim_decode_pair_internal(TALLOC_CTX *ctx, fr_cursor_t *cursor, fr
 		 *	RFC says we need to die on these if we don't
 		 *	understand them.  non-skippables are < 128.
 		 */
-		if (sim_at <= SIM_SKIPPABLE_MAX) {
+		if (sim_at <= AKA_SIM_SKIPPABLE_MAX) {
 			fr_strerror_printf("Unknown (non-skippable) attribute %i", sim_at);
 			return -1;
 		}
@@ -928,7 +927,7 @@ static ssize_t sim_decode_pair_internal(TALLOC_CTX *ctx, fr_cursor_t *cursor, fr
  *	- The number of bytes parsed.
  *	- -1 on error.
  */
-ssize_t fr_sim_decode_pair(TALLOC_CTX *ctx, fr_cursor_t *cursor, fr_dict_t const *dict,
+ssize_t fr_aka_sim_decode_pair(TALLOC_CTX *ctx, fr_cursor_t *cursor, fr_dict_t const *dict,
 			   uint8_t const *data, size_t data_len, void *decoder_ctx)
 {
 	return sim_decode_pair_internal(ctx, cursor, fr_dict_root(dict), data, data_len, decoder_ctx);
@@ -961,8 +960,8 @@ ssize_t fr_sim_decode_pair(TALLOC_CTX *ctx, fr_cursor_t *cursor, fr_dict_t const
  *	- 0 on success.
  *	- -1 on failure.
  */
-int fr_sim_decode(REQUEST *request, fr_cursor_t *decoded, fr_dict_t const *dict,
-		  uint8_t const *data, size_t data_len, fr_sim_decode_ctx_t *decoder_ctx)
+int fr_aka_sim_decode(REQUEST *request, fr_cursor_t *decoded, fr_dict_t const *dict,
+		  uint8_t const *data, size_t data_len, fr_aka_sim_decode_ctx_t *decoder_ctx)
 {
 	ssize_t			rcode;
 	uint8_t	const		*p = data;
@@ -996,7 +995,7 @@ int fr_sim_decode(REQUEST *request, fr_cursor_t *decoded, fr_dict_t const *dict,
 	 *	in the SIM/AKA/AKA' dict.
 	 */
 	while (p < end) {
-		rcode = fr_sim_decode_pair(request->packet, decoded, dict, p, end - p, decoder_ctx);
+		rcode = fr_aka_sim_decode_pair(request->packet, decoded, dict, p, end - p, decoder_ctx);
 		if (rcode <= 0) {
 			RPEDEBUG("Failed decoding AT");
 		error:
@@ -1015,7 +1014,7 @@ int fr_sim_decode(REQUEST *request, fr_cursor_t *decoded, fr_dict_t const *dict,
 	{
 		VALUE_PAIR *vp;
 
-		vp = fr_pair_afrom_child_num(request->packet, fr_dict_root(dict), FR_SIM_SUBTYPE);
+		vp = fr_pair_afrom_child_num(request->packet, fr_dict_root(dict), FR_SUBTYPE);
 		if (!vp) {
 			fr_strerror_printf("Failed allocating subtype attribute");
 			goto error;
@@ -1027,22 +1026,22 @@ int fr_sim_decode(REQUEST *request, fr_cursor_t *decoded, fr_dict_t const *dict,
 	return 0;
 }
 
-static int _test_ctx_free(UNUSED fr_sim_decode_ctx_t *ctx)
+static int _test_ctx_free(UNUSED fr_aka_sim_decode_ctx_t *ctx)
 {
-	fr_sim_free();
+	fr_aka_sim_free();
 
 	return 0;
 }
 
-static fr_sim_decode_ctx_t *test_ctx_init(TALLOC_CTX *ctx, uint8_t const *k_encr, size_t k_encr_len)
+static fr_aka_sim_decode_ctx_t *test_ctx_init(TALLOC_CTX *ctx, uint8_t const *k_encr, size_t k_encr_len)
 {
-	fr_sim_decode_ctx_t	*test_ctx;
-	fr_sim_keys_t		*keys;
+	fr_aka_sim_decode_ctx_t	*test_ctx;
+	fr_aka_sim_keys_t		*keys;
 
-	if (fr_sim_init() < 0) return NULL;
+	if (fr_aka_sim_init() < 0) return NULL;
 
-	test_ctx = talloc_zero(ctx, fr_sim_decode_ctx_t);
-	test_ctx->keys = keys = talloc_zero(test_ctx, fr_sim_keys_t);
+	test_ctx = talloc_zero(ctx, fr_aka_sim_decode_ctx_t);
+	test_ctx->keys = keys = talloc_zero(test_ctx, fr_aka_sim_keys_t);
 	memcpy(keys->k_encr, k_encr, k_encr_len);
 	talloc_set_destructor(test_ctx, _test_ctx_free);
 
@@ -1053,7 +1052,7 @@ static fr_sim_decode_ctx_t *test_ctx_init(TALLOC_CTX *ctx, uint8_t const *k_encr
  */
 static int decode_test_ctx_sim(void **out, TALLOC_CTX *ctx)
 {
-	fr_sim_decode_ctx_t	*test_ctx;
+	fr_aka_sim_decode_ctx_t	*test_ctx;
 	static uint8_t		k_encr[] = { 0x00, 0x01, 0x02, 0x03, 0x04 ,0x05, 0x06, 0x07,
 					     0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f };
 
@@ -1070,7 +1069,7 @@ static int decode_test_ctx_sim(void **out, TALLOC_CTX *ctx)
 
 static int decode_test_ctx_aka(void **out, TALLOC_CTX *ctx)
 {
-	fr_sim_decode_ctx_t *test_ctx;
+	fr_aka_sim_decode_ctx_t *test_ctx;
 	static uint8_t		k_encr[] = { 0x00, 0x01, 0x02, 0x03, 0x04 ,0x05, 0x06, 0x07,
 					     0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f };
 
@@ -1086,7 +1085,7 @@ static int decode_test_ctx_aka(void **out, TALLOC_CTX *ctx)
 
 static int decode_test_ctx_sim_rfc4186(void **out, TALLOC_CTX *ctx)
 {
-	fr_sim_decode_ctx_t *test_ctx;
+	fr_aka_sim_decode_ctx_t *test_ctx;
 	static uint8_t		k_encr[] = { 0x53, 0x6e, 0x5e, 0xbc, 0x44 ,0x65, 0x58, 0x2a,
 					     0xa6, 0xa8, 0xec, 0x99, 0x86, 0xeb, 0xb6, 0x20 };
 
@@ -1104,17 +1103,17 @@ static int decode_test_ctx_sim_rfc4186(void **out, TALLOC_CTX *ctx)
 extern fr_test_point_pair_decode_t sim_tp_decode;
 fr_test_point_pair_decode_t sim_tp_decode = {
 	.test_ctx	= decode_test_ctx_sim,
-	.func		= fr_sim_decode_pair
+	.func		= fr_aka_sim_decode_pair
 };
 
 extern fr_test_point_pair_decode_t sim_tp_decode_rfc4186;
 fr_test_point_pair_decode_t sim_tp_decode_rfc4186 = {
 	.test_ctx	= decode_test_ctx_sim_rfc4186,
-	.func		= fr_sim_decode_pair
+	.func		= fr_aka_sim_decode_pair
 };
 
 extern fr_test_point_pair_decode_t aka_tp_decode;
 fr_test_point_pair_decode_t aka_tp_decode = {
 	.test_ctx	= decode_test_ctx_aka,
-	.func		= fr_sim_decode_pair
+	.func		= fr_aka_sim_decode_pair
 };

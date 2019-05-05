@@ -1,10 +1,10 @@
-if ("%{sim_id_method:User-Name}" != 'AKA') {
+if ("%{aka_sim_id_method:User-Name}" != 'AKA') {
 	test_fail
 } else {
 	test_pass
 }
 
-if ("%{sim_id_type:User-Name}" != 'Permanent') {
+if ("%{aka_sim_id_type:User-Name}" != 'Permanent') {
 	test_fail
 } else {
 	test_pass
@@ -23,7 +23,7 @@ update control {
 #
 #  Can we get the EAP method from the encrypted blob correctly?
 #
-if ("%{sim_id_method:control:User-Name}" != 'AKA') {
+if ("%{aka_sim_id_method:control:User-Name}" != 'AKA') {
 	test_fail
 } else {
 	test_pass
@@ -32,7 +32,7 @@ if ("%{sim_id_method:control:User-Name}" != 'AKA') {
 #
 #  Can we identify the encrypted blob correctly?
 #
-if ("%{sim_id_type:control:User-Name}" != 'Pseudonym') {
+if ("%{aka_sim_id_type:control:User-Name}" != 'Pseudonym') {
 	test_fail
 } else {
 	test_pass
