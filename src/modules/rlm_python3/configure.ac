@@ -1,7 +1,7 @@
 AC_PREREQ([2.53])
-AC_INIT(rlm_python.c)
+AC_INIT(rlm_python3.c)
 AC_REVISION($Revision$)
-AC_DEFUN(modname,[rlm_python])
+AC_DEFUN(modname,[rlm_python3])
 
 if test x$with_[]modname != xno; then
 
@@ -10,11 +10,11 @@ if test x$with_[]modname != xno; then
 
 	dnl extra argument: --with-rlm-python-bin
 	PYTHON_BIN=
-	AC_ARG_WITH(rlm-python-bin,
-	[  --with-rlm-python-bin=PATH   Path to python binary []],
+	AC_ARG_WITH(rlm-python3-bin,
+	[  --with-rlm-python3-bin=PATH   Path to python3 binary []],
 	[ case "$withval" in
 	    no)
-		AC_MSG_ERROR(Need rlm-python-bin)
+		AC_MSG_ERROR(Need rlm-python3-bin)
 		;;
 	    yes)
 		;;
@@ -25,7 +25,7 @@ if test x$with_[]modname != xno; then
 	)
 
 	if test "x$PYTHON_BIN" = x; then
-		AC_CHECK_PROGS(PYTHON_BIN, [ python2.7 python2.6 python ], not-found, [${PATH}:/usr/bin:/usr/local/bin])
+		AC_CHECK_PROGS(PYTHON_BIN, [ python3 ], not-found, [${PATH}:/usr/bin:/usr/local/bin])
 	fi
 
 	if test "x$PYTHON_BIN" = "xnot-found"; then
@@ -34,11 +34,11 @@ if test x$with_[]modname != xno; then
 
 	dnl extra argument: --with-rlm-python-lib-dir
 	PY_LIB_DIR=
-	AC_ARG_WITH(rlm-python-lib-dir,
-	[  --with-rlm-python-lib-dir=DIR       Directory for Python library files []],
+	AC_ARG_WITH(rlm-python3-lib-dir,
+	[  --with-rlm-python3-lib-dir=DIR       Directory for Python library files []],
 	[ case "$withval" in
 	    no)
-		AC_MSG_ERROR(Need rlm-python-lib-dir)
+		AC_MSG_ERROR(Need rlm-python3-lib-dir)
 		;;
 	    yes)
 		;;
@@ -48,13 +48,13 @@ if test x$with_[]modname != xno; then
 	  esac ]
 	)
 
-	dnl extra argument: --with-rlm-python-include-dir
+	dnl extra argument: --with-rlm-python3-include-dir
 	PY_INC_DIR=
-	AC_ARG_WITH(rlm-python-include-dir,
-	[  --with-rlm-python-include-dir=DIR   Directory for Python include files []],
+	AC_ARG_WITH(rlm-python3-include-dir,
+	[  --with-rlm-python3-include-dir=DIR   Directory for Python include files []],
 	[ case "$withval" in
 	    no)
-		AC_MSG_ERROR(Need rlm-python-include-dir)
+		AC_MSG_ERROR(Need rlm-python3-include-dir)
 		;;
 	    yes)
 		;;

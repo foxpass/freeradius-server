@@ -582,7 +582,7 @@ PACKAGE_STRING=
 PACKAGE_BUGREPORT=
 PACKAGE_URL=
 
-ac_unique_file="rlm_python.c"
+ac_unique_file="rlm_python3.c"
 ac_subst_vars='LTLIBOBJS
 LIBOBJS
 targetname
@@ -638,9 +638,9 @@ SHELL'
 ac_subst_files=''
 ac_user_opts='
 enable_option_checking
-with_rlm_python_bin
-with_rlm_python_lib_dir
-with_rlm_python_include_dir
+with_rlm_python3_bin
+with_rlm_python3_lib_dir
+with_rlm_python3_include_dir
 '
       ac_precious_vars='build_alias
 host_alias
@@ -1257,9 +1257,9 @@ if test -n "$ac_init_help"; then
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
-  --with-rlm-python-bin=PATH   Path to python binary
-  --with-rlm-python-lib-dir=DIR       Directory for Python library files
-  --with-rlm-python-include-dir=DIR   Directory for Python include files
+  --with-rlm-python3-bin=PATH   Path to python3 binary
+  --with-rlm-python3-lib-dir=DIR       Directory for Python library files
+  --with-rlm-python3-include-dir=DIR   Directory for Python include files
 
 Some influential environment variables:
   CC          C compiler command
@@ -1893,7 +1893,7 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
 
 
-if test x$with_rlm_python != xno; then
+if test x$with_rlm_python3 != xno; then
 
 	ac_ext=c
 ac_cpp='$CPP $CPPFLAGS'
@@ -2824,11 +2824,11 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
 		PYTHON_BIN=
 
-# Check whether --with-rlm-python-bin was given.
-if test "${with_rlm_python_bin+set}" = set; then :
-  withval=$with_rlm_python_bin;  case "$withval" in
+# Check whether --with-rlm-python3-bin was given.
+if test "${with_rlm_python3_bin+set}" = set; then :
+  withval=$with_rlm_python3_bin;  case "$withval" in
 	    no)
-		as_fn_error $? "Need rlm-python-bin" "$LINENO" 5
+		as_fn_error $? "Need rlm-python3-bin" "$LINENO" 5
 		;;
 	    yes)
 		;;
@@ -2841,7 +2841,7 @@ fi
 
 
 	if test "x$PYTHON_BIN" = x; then
-		for ac_prog in  python2.7 python2.6 python
+		for ac_prog in  python3
 do
   # Extract the first word of "$ac_prog", so it can be a program name with args.
 set dummy $ac_prog; ac_word=$2
@@ -2893,11 +2893,11 @@ test -n "$PYTHON_BIN" || PYTHON_BIN="not-found"
 
 		PY_LIB_DIR=
 
-# Check whether --with-rlm-python-lib-dir was given.
-if test "${with_rlm_python_lib_dir+set}" = set; then :
-  withval=$with_rlm_python_lib_dir;  case "$withval" in
+# Check whether --with-rlm-python3-lib-dir was given.
+if test "${with_rlm_python3_lib_dir+set}" = set; then :
+  withval=$with_rlm_python3_lib_dir;  case "$withval" in
 	    no)
-		as_fn_error $? "Need rlm-python-lib-dir" "$LINENO" 5
+		as_fn_error $? "Need rlm-python3-lib-dir" "$LINENO" 5
 		;;
 	    yes)
 		;;
@@ -2911,11 +2911,11 @@ fi
 
 		PY_INC_DIR=
 
-# Check whether --with-rlm-python-include-dir was given.
-if test "${with_rlm_python_include_dir+set}" = set; then :
-  withval=$with_rlm_python_include_dir;  case "$withval" in
+# Check whether --with-rlm-python3-include-dir was given.
+if test "${with_rlm_python3_include_dir+set}" = set; then :
+  withval=$with_rlm_python3_include_dir;  case "$withval" in
 	    no)
-		as_fn_error $? "Need rlm-python-include-dir" "$LINENO" 5
+		as_fn_error $? "Need rlm-python3-include-dir" "$LINENO" 5
 		;;
 	    yes)
 		;;
@@ -3383,7 +3383,7 @@ fi
 		eval t=\${ac_cv_lib_${sm_lib_safe}_${sm_func_safe}}
 		if test "x$t" = "xyes"; then
 			mod_ldflags="$PY_LIB_LOC $PY_EXTRA_LIBS $SMART_LIBS -lm"
-			targetname=rlm_python
+			targetname=rlm_python3
 		else
 
 
@@ -3562,7 +3562,7 @@ fi
 			eval t=\${ac_cv_lib_${sm_lib_safe}_${sm_func_safe}}
 			if test "x$t" = "xyes"; then
 				mod_ldflags="$PY_LIB_LOC $PY_EXTRA_LIBS $SMART_LIBS -lm"
-				targetname=rlm_python
+				targetname=rlm_python3
 			else
 				targetname=
 				fail="$fail libpython$PY_SYS_VERSION"
@@ -3583,17 +3583,17 @@ done
 
 else
 	targetname=
-	echo \*\*\* module rlm_python is disabled.
+	echo \*\*\* module rlm_python3 is disabled.
 fi
 
 if test x"$fail" != x""; then
 	if test x"${enable_strict_dependencies}" = x"yes"; then
-		as_fn_error $? "set --without-rlm_python to disable it explicitly." "$LINENO" 5
+		as_fn_error $? "set --without-rlm_python3 to disable it explicitly." "$LINENO" 5
 	else
-		{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: silently not building rlm_python." >&5
-$as_echo "$as_me: WARNING: silently not building rlm_python." >&2;}
-		{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: FAILURE: rlm_python requires: $fail." >&5
-$as_echo "$as_me: WARNING: FAILURE: rlm_python requires: $fail." >&2;};
+		{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: silently not building rlm_python3." >&5
+$as_echo "$as_me: WARNING: silently not building rlm_python3." >&2;}
+		{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: FAILURE: rlm_python3 requires: $fail." >&5
+$as_echo "$as_me: WARNING: FAILURE: rlm_python3 requires: $fail." >&2;};
 		targetname=""
 	fi
 fi
