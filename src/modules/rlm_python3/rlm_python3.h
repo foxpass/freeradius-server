@@ -44,6 +44,9 @@ typedef struct rlm_python_t {
 
 	PyObject	*pythonconf_dict;	//!< Configuration parameters defined in the module
 						//!< made available to the python script.
+
+	bool pass_all_vps;
+	bool pass_all_vps_dict;
 } rlm_python_t;
 
 /** Tracks a python module inst/thread state pair
