@@ -16,7 +16,7 @@
 
 /**
  * $Id$
- * @file rlm_python.c
+ * @file rlm_python3.c
  * @brief Translates requests between the server an a python interpreter.
  *
  * @note Rewritten by Paul P. Komkoff Jr <i@stingr.net>.
@@ -42,7 +42,7 @@ RCSID("$Id$")
 #endif
 
 #define LIBPYTHON_LINKER_NAME \
-	"libpython" STRINGIFY(PY_MAJOR_VERSION) "." STRINGIFY(PY_MINOR_VERSION) ".so"
+	"libpython" STRINGIFY(PY_MAJOR_VERSION) "." STRINGIFY(PY_MINOR_VERSION) "m.so"
 
 static uint32_t		python_instances = 0;
 static void		*python_dlhandle;
@@ -1262,10 +1262,10 @@ static int mod_detach(void *instance)
  *	The server will then take care of ensuring that the module
  *	is single-threaded.
  */
-extern module_t rlm_python;
-module_t rlm_python = {
+extern module_t rlm_python3;
+module_t rlm_python3 = {
 	.magic		= RLM_MODULE_INIT,
-	.name		= "python",
+	.name		= "python3",
 	.type		= RLM_TYPE_THREAD_UNSAFE,
 	.inst_size	= sizeof(rlm_python_t),
 	.config		= module_config,
