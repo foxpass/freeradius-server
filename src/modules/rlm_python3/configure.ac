@@ -8,7 +8,7 @@ if test x$with_[]modname != xno; then
 	AC_PROG_CC
 	AC_PROG_CPP
 
-	dnl extra argument: --with-rlm-python-bin
+	dnl extra argument: --with-rlm-python3-bin
 	PYTHON_BIN=
 	AC_ARG_WITH(rlm-python3-bin,
 	[  --with-rlm-python3-bin=PATH   Path to python3 binary []],
@@ -32,7 +32,7 @@ if test x$with_[]modname != xno; then
 		fail="python-binary"
 	fi
 
-	dnl extra argument: --with-rlm-python-lib-dir
+	dnl extra argument: --with-rlm-python3-lib-dir
 	PY_LIB_DIR=
 	AC_ARG_WITH(rlm-python3-lib-dir,
 	[  --with-rlm-python3-lib-dir=DIR       Directory for Python library files []],

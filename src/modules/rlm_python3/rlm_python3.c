@@ -27,7 +27,7 @@
  */
 RCSID("$Id$")
 
-#define LOG_PREFIX "rlm_python - "
+#define LOG_PREFIX "rlm_python3 - "
 
 #include "config.h"
 #include <freeradius-devel/radiusd.h>
@@ -36,6 +36,7 @@ RCSID("$Id$")
 
 #include <Python.h>
 #include <dlfcn.h>
+#include "rlm_python3.h"
 #ifdef HAVE_DL_ITERATE_PHDR
 #include <link.h>
 #endif
@@ -49,65 +50,8 @@ static void		*python_dlhandle;
 static PyThreadState	*main_interpreter;	//!< Main interpreter (cext safe)
 static PyObject		*main_module;		//!< Pthon configuration dictionary.
 
-/** Specifies the module.function to load for processing a section
- *
- */
-typedef struct python_func_def {
-	PyObject	*module;		//!< Python reference to module.
-	PyObject	*function;		//!< Python reference to function in module.
-
-	char const	*module_name;		//!< String name of module.
-	char const	*function_name;		//!< String name of function in module.
-} python_func_def_t;
-
-/** An instance of the rlm_python module
- *
- */
-typedef struct rlm_python_t {
-	char const	*name;			//!< Name of the module instance
-	PyThreadState	*sub_interpreter;	//!< The main interpreter/thread used for this instance.
-	char const	*python_path;		//!< Path to search for python files in.
-
-#if PY_VERSION_HEX > 0x03050000
-	wchar_t		*wide_name;		//!< Special wide char encoding of radiusd name.
-	wchar_t		*wide_path;		//!< Special wide char encoding of radiusd path.
-#endif
-	PyObject	*module;		//!< Local, interpreter specific module, containing
-						//!< FreeRADIUS functions.
-	bool		cext_compat;		//!< Whether or not to create sub-interpreters per module
-						//!< instance.
-
-	python_func_def_t
-	instantiate,
-	authorize,
-	authenticate,
-	preacct,
-	accounting,
-	checksimul,
-	pre_proxy,
-	post_proxy,
-	post_auth,
-#ifdef WITH_COA
-	recv_coa,
-	send_coa,
-#endif
-	detach;
-
-	PyObject	*pythonconf_dict;	//!< Configuration parameters defined in the module
-						//!< made available to the python script.
-	bool 		pass_all_vps;		//!< Pass all VPS lists (request, reply, config, state, proxy_req, proxy_reply)
-	bool 		pass_all_vps_dict;		//!< Pass all VPS lists as a dictionary rather than a tuple
-} rlm_python_t;
-
-/** Tracks a python module inst/thread state pair
- *
- * Multiple instances of python create multiple interpreters and each
- * thread must have a PyThreadState per interpreter, to track execution.
- */
-typedef struct python_thread_state {
-	PyThreadState		*state;		//!< Module instance/thread specific state.
-	rlm_python_t		*inst;		//!< Module instance that created this thread state.
-} python_thread_state_t;
+static rlm_python_t *current_inst;		//!< Needed to pass parameter to PyInit_radiusd
+static CONF_SECTION *current_conf;		//!< Needed to pass parameter to PyInit_radiusd
 
 /*
  *	A mapping of configuration file names to internal variables.
@@ -116,6 +60,10 @@ static CONF_PARSER module_config[] = {
 
 #define A(x) { "mod_" #x, FR_CONF_OFFSET(PW_TYPE_STRING, rlm_python_t, x.module_name), "${.module}" }, \
 	{ "func_" #x, FR_CONF_OFFSET(PW_TYPE_STRING, rlm_python_t, x.function_name), NULL },
+/*
+#define A(x) { FR_CONF_OFFSET("mod_" #x, PW_TYPE_STRING, rlm_python_t, x.module_name), .dflt = "${.module}" }, \
+{ FR_CONF_OFFSET("mod_" #x, PW_TYPE_STRING, rlm_python_t, x.function_name), NULL },
+*/
 
 	A(instantiate)
 	A(authorize)
@@ -134,10 +82,13 @@ static CONF_PARSER module_config[] = {
 
 #undef A
 
-	{ "python_path", FR_CONF_OFFSET(PW_TYPE_STRING, rlm_python_t, python_path), NULL },
-	{ "cext_compat", FR_CONF_OFFSET(PW_TYPE_BOOLEAN, rlm_python_t, cext_compat), "yes" },
-	{ "pass_all_vps", FR_CONF_OFFSET(PW_TYPE_BOOLEAN, rlm_python_t, pass_all_vps), "no" },
-	{ "pass_all_vps_dict", FR_CONF_OFFSET(PW_TYPE_BOOLEAN, rlm_python_t, pass_all_vps_dict), "no" },
+//{ "python_path", FR_CONF_OFFSET(PW_TYPE_STRING, rlm_python_t, python_path), NULL },
+//{ "cext_compat", FR_CONF_OFFSET(PW_TYPE_BOOLEAN, rlm_python_t, cext_compat), "yes" },
+//{ "pass_all_vps", FR_CONF_OFFSET(PW_TYPE_BOOLEAN, rlm_python_t, pass_all_vps), "no" },
+//{ "pass_all_vps_dict", FR_CONF_OFFSET(PW_TYPE_BOOLEAN, rlm_python_t, pass_all_vps_dict), "no" },
+
+
+
 
 	CONF_PARSER_TERMINATOR
 };
@@ -212,6 +163,23 @@ static PyMethodDef module_methods[] = {
 	{ NULL, NULL, 0, NULL },
 };
 
+/*
+ *	Initialise a new module, with our default methods
+ */
+static struct PyModuleDef moduledef = {
+	PyModuleDef_HEAD_INIT,
+	"radiusd",			/*m_doc*/
+	"FreeRADIUS python module",	/*m_doc*/
+	-1,				/*m_size*/
+	module_methods,			/*m_methods*/
+	NULL,				/*m_reload*/
+	NULL,				/*m_traverse*/
+	NULL,				/*m_clear*/
+	NULL,				/*m_free*/
+
+};
+
+
 /** Print out the current error
  *
  * Must be called with a valid thread state set
@@ -227,7 +195,8 @@ static void python_error_log(void)
 	    ((pStr2 = PyObject_Str(pValue)) == NULL))
 		goto failed;
 
-	ERROR("%s (%s)", PyString_AsString(pStr1), PyString_AsString(pStr2));
+	//ERROR("%s (%s)", PyString_AsString(pStr1), PyString_AsString(pStr2));
+	ERROR("%s (%s)", PyUnicode_AsUTF8(pStr1), PyUnicode_AsUTF8(pStr2));
 
 failed:
 	Py_XDECREF(pStr1);
@@ -286,24 +255,30 @@ static void mod_vptuple(TALLOC_CTX *ctx, REQUEST *request, VALUE_PAIR **vps, PyO
 		pStr1 = PyTuple_GET_ITEM(pTupleElement, 0);
 		pStr2 = PyTuple_GET_ITEM(pTupleElement, pairsize-1);
 
-		if ((!PyString_CheckExact(pStr1)) || (!PyString_CheckExact(pStr2))) {
+		if (PyUnicode_CheckExact(pStr1)  && PyUnicode_CheckExact(pStr2)) {
+			s1 = PyUnicode_AsUTF8(pStr1);
+			s2 = PyUnicode_AsUTF8(pStr2);
+		} else if (PyUnicode_CheckExact(pStr1)  && PyBytes_CheckExact(pStr2)) {
+			s1 = PyUnicode_AsUTF8(pStr1);
+			s2 = PyBytes_AsString(pStr2);
+		} else{
 			ERROR("%s - Tuple element %d of %s must be as (str, str)",
 			      funcname, i, list_name);
 			continue;
 		}
-		s1 = PyString_AsString(pStr1);
-		s2 = PyString_AsString(pStr2);
+		//s1 = PyString_AsString(pStr1);
+		//s2 = PyString_AsString(pStr2);
 
 		if (pairsize == 3) {
 			pOp = PyTuple_GET_ITEM(pTupleElement, 1);
-			if (PyString_CheckExact(pOp)) {
-				if (!(op = fr_str2int(fr_tokens, PyString_AsString(pOp), 0))) {
+			if (PyUnicode_CheckExact(pOp)) {
+				if (!(op = fr_str2int(fr_tokens, PyUnicode_AsUTF8(pOp), 0))) {
 					ERROR("%s - Invalid operator %s:%s %s %s, falling back to '='",
-					      funcname, list_name, s1, PyString_AsString(pOp), s2);
+					      funcname, list_name, s1, PyUnicode_AsUTF8(pOp), s2);
 					op = T_OP_EQ;
 				}
-			} else if (PyInt_Check(pOp)) {
-				op	= PyInt_AsLong(pOp);
+			} else if (PyLong_Check(pOp)) {
+				op	= PyLong_AsLong(pOp);
 				if (!fr_int2str(fr_tokens, op, NULL)) {
 					ERROR("%s - Invalid operator %s:%s %i %s, falling back to '='",
 					      funcname, list_name, s1, op, s2);
@@ -366,9 +341,9 @@ static int mod_populate_vptuple(PyObject *pPair, VALUE_PAIR *vp)
 	/* Look at the fr_pair_fprint_name? */
 
 	if (vp->da->flags.has_tag) {
-		pStr = PyString_FromFormat("%s:%d", vp->da->name, vp->tag);
+		pStr = PyUnicode_FromFormat("%s:%d", vp->da->name, vp->tag);
 	} else {
-		pStr = PyString_FromString(vp->da->name);
+		pStr = PyUnicode_FromString(vp->da->name);
 	}
 
 	if (!pStr) return -1;
@@ -377,7 +352,7 @@ static int mod_populate_vptuple(PyObject *pPair, VALUE_PAIR *vp)
 
 	vp_prints_value(buf, sizeof(buf), vp, '\0');	/* Python doesn't need any escaping */
 
-	pStr = PyString_FromString(buf);
+	pStr = PyUnicode_FromString(buf);
 	if (pStr == NULL) return -1;
 
 	PyTuple_SET_ITEM(pPair, 1, pStr);
@@ -528,7 +503,7 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 
 	if (!request) {
 		// check return code at module instantiation time
-		if (PyInt_CheckExact(pRet)) ret = PyInt_AsLong(pRet);
+		if (PyLong_CheckExact(pRet)) ret = PyLong_AsLong(pRet);
 		goto finish;
 	}
 
@@ -556,13 +531,13 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 		}
 
 		pTupleInt = PyTuple_GET_ITEM(pRet, 0);
-		if (!PyInt_CheckExact(pTupleInt)) {
+		if (!PyLong_CheckExact(pTupleInt)) {
 			ERROR("%s - First tuple element not an integer", funcname);
 			ret = RLM_MODULE_FAIL;
 			goto finish;
 		}
 		/* Now have the return value */
-		ret = PyInt_AsLong(pTupleInt);
+		ret = PyLong_AsLong(pTupleInt);
 
 		/* process updateDict */
 		if (tuple_size == 2) {
@@ -606,9 +581,9 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 			mod_vptuple(request, request, &request->config,
 				    PyTuple_GET_ITEM(pRet, 2), funcname, "config");
 		}
-	} else if (PyInt_CheckExact(pRet)) {
+	} else if (PyLong_CheckExact(pRet)) {
 		/* Just an integer */
-		ret = PyInt_AsLong(pRet);
+		ret = PyLong_AsLong(pRet);
 
 	} else if (pRet == Py_None) {
 		/* returned 'None', return value defaults to "OK, continue." */
@@ -754,7 +729,8 @@ static rlm_rcode_t do_python(rlm_python_t *inst, REQUEST *request, PyObject *pFu
 	RDEBUG3("Using thread state %p", this_thread->state);
 
 	PyEval_RestoreThread(this_thread->state);	/* Swap in our local thread state */
-	ret = do_python_single(request, pFunc, funcname, inst->pass_all_vps, inst->pass_all_vps_dict);
+	//ret = do_python_single(request, pFunc, funcname, inst->pass_all_vps, inst->pass_all_vps_dict);
+	ret = do_python_single(request, pFunc, funcname, true, true);
 	PyEval_SaveThread();
 
 	return ret;
@@ -857,7 +833,7 @@ static void python_parse_config(CONF_SECTION *cs, int lvl, PyObject *dict)
 
 			if (!key) continue;
 
-			pKey = PyString_FromString(key);
+			pKey = PyUnicode_FromString(key);
 			if (!pKey) continue;
 
 			if (PyDict_Contains(dict, pKey)) {
@@ -880,8 +856,8 @@ static void python_parse_config(CONF_SECTION *cs, int lvl, PyObject *dict)
 
 			if (!key || !value) continue;
 
-			pKey = PyString_FromString(key);
-			pValue = PyString_FromString(value);
+			pKey = PyUnicode_FromString(key);
+			pValue = PyUnicode_FromString(value);
 			if (!pKey || !pValue) continue;
 
 			/*
@@ -964,12 +940,85 @@ static void *dlopen_libpython(int flags)
 }
 #endif	/* ! HAVE_DL_ITERATE_PHDR */
 
+/*
+ * creates a module "radiusd"
+ */
+static PyMODINIT_FUNC PyInit_radiusd(void)
+{
+	CONF_SECTION *cs;
+	/*
+	 * This is ugly, but there is no other way to pass parameters to PyMODINIT_FUNC
+	 */
+	rlm_python_t *inst = current_inst;
+	CONF_SECTION *conf = current_conf;
+	int i;
+
+	inst->module = PyModule_Create(&moduledef);
+	if (!inst->module) {
+		python_error_log();
+		PyEval_SaveThread();
+		return Py_None;
+	}
+
+	/*
+	 *	Py_InitModule3 returns a borrowed ref, the actual
+	 *	module is owned by sys.modules, so we also need
+	 *	to own the module to prevent it being freed early.
+	 */
+	//Py_IncRef(inst->module);
+
+	if (inst->cext_compat) main_module = inst->module;
+
+	for (i = 0; radiusd_constants[i].name; i++) {
+		if ((PyModule_AddIntConstant(inst->module, radiusd_constants[i].name,
+					     radiusd_constants[i].value)) < 0){
+			python_error_log();
+			PyEval_SaveThread();
+			return Py_None;
+		}
+	}
+
+	/*
+	 *	Convert a FreeRADIUS config structure into a python
+	 *	dictionary.
+	 */
+	inst->pythonconf_dict = PyDict_New();
+	if (!inst->pythonconf_dict) {
+		ERROR("Unable to create python dict for config");
+		python_error_log();
+		return Py_None;
+	}
+
+	/*
+	 *	Add module configuration as a dict
+	 */
+	if (PyModule_AddObject(inst->module, "config", inst->pythonconf_dict) < 0){
+		python_error_log();
+		PyEval_SaveThread();
+		return Py_None;
+	}
+	cs = cf_section_sub_find(conf, "config");
+	if (cs) python_parse_config(cs, 0, inst->pythonconf_dict);
+
+	return inst->module;
+}
+
 /** Initialises a separate python interpreter for this module instance
  *
  */
 static int python_interpreter_init(rlm_python_t *inst, CONF_SECTION *conf)
 {
-	int i;
+	/*
+	 * prepare radiusd module to be loaded
+	 */
+	if (!inst->cext_compat || !main_module) {
+		/*
+		 * This is ugly, but there is no other way to pass parameters to PyMODINIT_FUNC
+		 */
+		current_inst = inst;
+		current_conf = conf;
+		PyImport_AppendInittab("radiusd",PyInit_radiusd);
+	}
 
 	/*
 	 *	Explicitly load libpython, so symbols will be available to lib-dynload modules
@@ -982,7 +1031,17 @@ static int python_interpreter_init(rlm_python_t *inst, CONF_SECTION *conf)
 
 #if PY_VERSION_HEX > 0x03050000
 		{
-			inst->wide_name = Py_DecodeLocale(main_config.name, strlen(main_config.name));
+			wchar_t  *name;
+
+			MEM(name = Py_DecodeLocale(main_config.name, NULL));
+			Py_SetProgramName(name);		/* The value of argv[0] as a wide char string */
+			PyMem_RawFree(name);
+		}
+#elif PY_VERSION_HEX > 0x0300000
+		{
+			wchar_t *name;
+
+			MEM(name = _Py_char2wchar(main_config.name, NULL));
 			Py_SetProgramName(inst->wide_name);		/* The value of argv[0] as a wide char string */
 		}
 #else
@@ -1022,7 +1081,6 @@ static int python_interpreter_init(rlm_python_t *inst, CONF_SECTION *conf)
 	 *	with Python C extensions if they use GIL lock functions.
 	 */
 	if (!inst->cext_compat || !main_module) {
-		CONF_SECTION *cs;
 
 		/*
 		 *	Set the python search path
@@ -1034,63 +1092,35 @@ static int python_interpreter_init(rlm_python_t *inst, CONF_SECTION *conf)
 		if (inst->python_path) {
 #if PY_VERSION_HEX > 0x03050000
 			{
-				inst->wide_path = Py_DecodeLocale(inst->python_path, strlen(inst->python_path));
-				PySys_SetPath(inst->wide_path);
+				wchar_t *path;
+				PyObject* sys = PyImport_ImportModule("sys");
+				PyObject* sys_path = PyObject_GetAttrString(sys,"path");
+
+				MEM(path = Py_DecodeLocale(inst->python_path, NULL));
+				PyList_Append(sys_path, PyUnicode_FromWideChar(path,-1));				
+				PyObject_SetAttrString(sys,"path",sys_path);
+				PyMem_RawFree(path);
+			}
+#elif PY_VERSION_HEX > 0x03000000
+			{
+				wchar_t *path;
+				PyObject* sys = PyImport_ImportModule("sys");
+				PyObject* sys_path = PyObject_GetAttrString(sys,"path");
+
+				MEM(path = _Py_char2wchar(inst->python_path, NULL));
+				PyList_Append(sys_path, PyUnicode_FromWideChar(path,-1));				
+				PyObject_SetAttrString(sys,"path",sys_path);
 			}
 #else
 			{
 				char *path;
 
 				memcpy(&path, &inst->python_path, sizeof(path));
-				PySys_SetPath(path);
+				Py_SetPath(path);
 			}
 #endif
 		}
 
-		/*
-		 *	Initialise a new module, with our default methods
-		 */
-		inst->module = Py_InitModule3("radiusd", module_methods, "FreeRADIUS python module");
-		if (!inst->module) {
-		error:
-			python_error_log();
-			PyEval_SaveThread();
-			return -1;
-		}
-
-		/*
-		 *	Py_InitModule3 returns a borrowed ref, the actual
-		 *	module is owned by sys.modules, so we also need
-		 *	to own the module to prevent it being freed early.
-		 */
-		Py_IncRef(inst->module);
-
-		if (inst->cext_compat) main_module = inst->module;
-
-		for (i = 0; radiusd_constants[i].name; i++) {
-			if ((PyModule_AddIntConstant(inst->module, radiusd_constants[i].name,
-						     radiusd_constants[i].value)) < 0)
-				goto error;
-		}
-
-		/*
-		 *	Convert a FreeRADIUS config structure into a python
-		 *	dictionary.
-		 */
-		inst->pythonconf_dict = PyDict_New();
-		if (!inst->pythonconf_dict) {
-			ERROR("Unable to create python dict for config");
-			python_error_log();
-			return -1;
-		}
-
-		/*
-		 *	Add module configuration as a dict
-		 */
-		if (PyModule_AddObject(inst->module, "config", inst->pythonconf_dict) < 0) goto error;
-
-		cs = cf_section_sub_find(conf, "config");
-		if (cs) python_parse_config(cs, 0, inst->pythonconf_dict);
 	} else {
 		inst->module = main_module;
 		Py_IncRef(inst->module);
@@ -1154,7 +1184,8 @@ static int mod_instantiate(CONF_SECTION *conf, void *instance)
 	/*
 	 *	Call the instantiate function.
 	 */
-	code = do_python_single(NULL, inst->instantiate.function, "instantiate", inst->pass_all_vps, inst->pass_all_vps_dict);
+	//code = do_python_single(NULL, inst->instantiate.function, "instantiate", inst->pass_all_vps, inst->pass_all_vps_dict);
+	code = do_python_single(NULL, inst->instantiate.function, "instantiate", true, true);
 	if (code < 0) {
 	error:
 		python_error_log();	/* Needs valid thread with GIL */
@@ -1176,7 +1207,8 @@ static int mod_detach(void *instance)
 	 */
 	PyEval_RestoreThread(inst->sub_interpreter);
 
-	ret = do_python_single(NULL, inst->detach.function, "detach", inst->pass_all_vps, inst->pass_all_vps_dict);
+	//ret = do_python_single(NULL, inst->detach.function, "detach", inst->pass_all_vps, inst->pass_all_vps_dict);
+	ret = do_python_single(NULL, inst->detach.function, "detach", true, true);
 
 #define PYTHON_FUNC_DESTROY(_x) python_function_destroy(&inst->_x)
 	PYTHON_FUNC_DESTROY(instantiate);
@@ -1212,8 +1244,8 @@ static int mod_detach(void *instance)
 		dlclose(python_dlhandle);
 
 #if PY_VERSION_HEX > 0x03050000
-		if (inst->wide_name) PyMem_RawFree(inst->wide_name);
-		if (inst->wide_path) PyMem_RawFree(inst->wide_path);
+		//if (inst->wide_name) PyMem_RawFree(inst->wide_name);
+		//if (inst->wide_path) PyMem_RawFree(inst->wide_path);
 #endif
 	}
 
