@@ -60,10 +60,6 @@ static CONF_PARSER module_config[] = {
 
 #define A(x) { "mod_" #x, FR_CONF_OFFSET(PW_TYPE_STRING, rlm_python_t, x.module_name), "${.module}" }, \
 	{ "func_" #x, FR_CONF_OFFSET(PW_TYPE_STRING, rlm_python_t, x.function_name), NULL },
-/*
-#define A(x) { FR_CONF_OFFSET("mod_" #x, PW_TYPE_STRING, rlm_python_t, x.module_name), .dflt = "${.module}" }, \
-{ FR_CONF_OFFSET("mod_" #x, PW_TYPE_STRING, rlm_python_t, x.function_name), NULL },
-*/
 
 	A(instantiate)
 	A(authorize)
@@ -192,7 +188,6 @@ static void python_error_log(void)
 	    ((pStr2 = PyObject_Str(pValue)) == NULL))
 		goto failed;
 
-	//ERROR("%s (%s)", PyString_AsString(pStr1), PyString_AsString(pStr2));
 	ERROR("%s (%s)", PyUnicode_AsUTF8(pStr1), PyUnicode_AsUTF8(pStr2));
 
 failed:
@@ -263,8 +258,6 @@ static void mod_vptuple(TALLOC_CTX *ctx, REQUEST *request, VALUE_PAIR **vps, PyO
 			      funcname, i, list_name);
 			continue;
 		}
-		//s1 = PyString_AsString(pStr1);
-		//s2 = PyString_AsString(pStr2);
 
 		if (pairsize == 3) {
 			pOp = PyTuple_GET_ITEM(pTupleElement, 1);
@@ -726,8 +719,7 @@ static rlm_rcode_t do_python(rlm_python_t *inst, REQUEST *request, PyObject *pFu
 	RDEBUG3("Using thread state %p", this_thread->state);
 
 	PyEval_RestoreThread(this_thread->state);	/* Swap in our local thread state */
-	//ret = do_python_single(request, pFunc, funcname, inst->pass_all_vps, inst->pass_all_vps_dict);
-	ret = do_python_single(request, pFunc, funcname, true, true);
+	ret = do_python_single(request, pFunc, funcname, inst->pass_all_vps, inst->pass_all_vps_dict);
 	PyEval_SaveThread();
 
 	return ret;
@@ -1181,8 +1173,7 @@ static int mod_instantiate(CONF_SECTION *conf, void *instance)
 	/*
 	 *	Call the instantiate function.
 	 */
-	//code = do_python_single(NULL, inst->instantiate.function, "instantiate", inst->pass_all_vps, inst->pass_all_vps_dict);
-	code = do_python_single(NULL, inst->instantiate.function, "instantiate", true, true);
+	code = do_python_single(NULL, inst->instantiate.function, "instantiate", inst->pass_all_vps, inst->pass_all_vps_dict);
 	if (code < 0) {
 	error:
 		python_error_log();	/* Needs valid thread with GIL */
@@ -1204,8 +1195,7 @@ static int mod_detach(void *instance)
 	 */
 	PyEval_RestoreThread(inst->sub_interpreter);
 
-	//ret = do_python_single(NULL, inst->detach.function, "detach", inst->pass_all_vps, inst->pass_all_vps_dict);
-	ret = do_python_single(NULL, inst->detach.function, "detach", true, true);
+	ret = do_python_single(NULL, inst->detach.function, "detach", inst->pass_all_vps, inst->pass_all_vps_dict);
 
 #define PYTHON_FUNC_DESTROY(_x) python_function_destroy(&inst->_x)
 	PYTHON_FUNC_DESTROY(instantiate);

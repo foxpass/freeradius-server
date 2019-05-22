@@ -11,7 +11,7 @@ import radiusd
 # input and output formats
 
 def instantiate(p):
-  print "*** instantiate ***"
+  print ("*** instantiate ***")
   print (p)
   # return 0 for success or -1 for failure
 
