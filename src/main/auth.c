@@ -534,6 +534,27 @@ autz_redo:
 		} else {
 			rad_authlog("Invalid user", request, 0);
 		}
+	        char msg[MAX_STRING_LEN + 16];
+         	char result_string[MAX_STRING_LEN + 16];
+		switch (result) {
+	        case RLM_MODULE_FAIL:
+		    snprintf(result_string, sizeof(result_string), "RLM_MODULE_FAIL");
+		    break;
+	        case RLM_MODULE_INVALID:
+		    snprintf(result_string, sizeof(result_string), "RLM_MODULE_INVALID");
+		    break;
+	        case RLM_MODULE_REJECT:
+		    snprintf(result_string, sizeof(result_string), "RLM_MODULE_REJECT");
+		    break;
+	        case RLM_MODULE_USERLOCK:
+		    snprintf(result_string, sizeof(result_string), "RLM_MODULE_USERLOCK");
+		    break;
+                default:
+		    snprintf(result_string, sizeof(result_string), "Other result");
+		    break;
+		}
+		snprintf(msg, sizeof(msg), "result: %d(%s)", result, result_string);
+		rad_authlog(msg,request,0);
 		request->reply->code = PW_CODE_ACCESS_REJECT;
 		return result;
 	}
