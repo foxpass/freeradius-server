@@ -1134,6 +1134,7 @@ int modcall(rlm_components_t component, modcallable *c, REQUEST *request)
 	 *	Call the main handler.
 	 */
 	if (!modcall_recurse(request, component, 0, &stack[0], true)) {
+            ERROR("%s:%d, modcall_recurse returned false, request: %p", __func__, __LINE__, request);
 		return RLM_MODULE_FAIL;
 	}
 
