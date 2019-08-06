@@ -506,6 +506,69 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 		} else {
 			ERROR("%s:%d, %s - pRet is NULL, request: %p", __func__, __LINE__, funcname, request);
 		}
+
+		/*
+		 * Validate if the error occurred or not
+		 */
+		if (PyErr_Occurred()) {
+			if (request) {
+				RIDEBUG("%s:%d, %s - Python exception occurred for request: %p", __func__, __LINE__, funcname, request);
+			} else {
+				ERROR("%s:%d, %s - Python exception occurred, request: %p", __func__, __LINE__, funcname, request);
+			}
+		} else {
+			if (request) {
+				RIDEBUG("%s:%d, %s - Python exception NOT occurred for request: %p", __func__, __LINE__, funcname, request);
+			} else {
+				ERROR("%s:%d, %s - Python exception NOT occurred, request: %p", __func__, __LINE__, funcname, request);
+			}
+		}
+
+		// get the error details
+		PyObject *pExcType, *pExcValue, *pExcTraceback;
+		PyErr_Fetch(&pExcType, &pExcValue, &pExcTraceback);
+		if (request) {
+			RIDEBUG("%s:%d, %s - pExcType: %p, pExcvalue: %p, pExcTraceback: %p", __func__, __LINE__, funcname, pExcType, pExcValue, pExcTraceback);
+		} else {
+			ERROR("%s:%d, %s - pExcType: %p, pExcvalue: %p, pExcTraceback: %p", __func__, __LINE__, funcname, pExcType, pExcValue, pExcTraceback);
+		}
+
+		if (pExcType) {
+			PyObject* pRepr = PyObject_Repr(pExcType);
+			if (request) {
+				RIDEBUG("%s:%d, %s - Exception type: %s", __func__, __LINE__, funcname, PyBytes_AsString(pRepr));
+			} else {
+				ERROR("%s:%d, %s - Exception type: %s", __func__, __LINE__, funcname, PyBytes_AsString(pRepr));
+			}
+			Py_DecRef(pRepr);
+			Py_DecRef(pExcType);
+		}
+
+		if (pExcValue) {
+			PyObject* pRepr = PyObject_Repr(pExcValue);
+			if (request) {
+				RIDEBUG("%s:%d, %s - Exception value: %s", __func__, __LINE__, funcname, PyBytes_AsString(pRepr));
+			} else {
+				ERROR("%s:%d, %s - Exception value: %s", __func__, __LINE__, funcname, PyBytes_AsString(pRepr));
+			}
+			Py_DecRef(pRepr);
+			Py_DecRef(pExcValue);
+		}
+
+		if (pExcTraceback) {
+			PyObject* pRepr = PyObject_Repr(pExcTraceback);
+			if (request) {
+				RIDEBUG("%s:%d, %s - Exception traceback: %s", __func__, __LINE__, funcname, PyBytes_AsString(pRepr));
+			} else {
+				ERROR("%s:%d, %s - Exception traceback: %s", __func__, __LINE__, funcname, PyBytes_AsString(pRepr));
+			}
+			Py_DecRef(pRepr);
+			Py_DecRef(pExcTraceback);
+		}
+		/*
+		 * Clear the exception, so that the thread can continue processing 
+		 */
+		PyErr_Clear();
 		ret = RLM_MODULE_FAIL;
 		goto finish;
 	}
