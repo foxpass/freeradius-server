@@ -535,35 +535,44 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 
 		if (pExcType) {
 			PyObject* pRepr = PyObject_Repr(pExcType);
+			PyObject *pTypeString = PyUnicode_AsEncodedString(pRepr, "UTF-8", "strict");
+			char *excString = PyBytes_AsString(pTypeString);
 			if (request) {
-				RIDEBUG("%s:%d, %s - Exception type: %s", __func__, __LINE__, funcname, PyBytes_AsString(pRepr));
+				RIDEBUG("%s:%d, %s - Exception type: %s", __func__, __LINE__, funcname, excString);
 			} else {
-				ERROR("%s:%d, %s - Exception type: %s", __func__, __LINE__, funcname, PyBytes_AsString(pRepr));
+				ERROR("%s:%d, %s - Exception type: %s", __func__, __LINE__, funcname, excString);
 			}
 			Py_DecRef(pRepr);
 			Py_DecRef(pExcType);
+			Py_DecRef(pTypeString);
 		}
 
 		if (pExcValue) {
 			PyObject* pRepr = PyObject_Repr(pExcValue);
+			PyObject *pValueString = PyUnicode_AsEncodedString(pRepr, "UTF-8", "strict");
+			char *excValueString = PyBytes_AsString(pValueString);
 			if (request) {
-				RIDEBUG("%s:%d, %s - Exception value: %s", __func__, __LINE__, funcname, PyBytes_AsString(pRepr));
+				RIDEBUG("%s:%d, %s - Exception value: %s", __func__, __LINE__, funcname, excValueString);
 			} else {
-				ERROR("%s:%d, %s - Exception value: %s", __func__, __LINE__, funcname, PyBytes_AsString(pRepr));
+				ERROR("%s:%d, %s - Exception value: %s", __func__, __LINE__, funcname, excValueString);
 			}
 			Py_DecRef(pRepr);
 			Py_DecRef(pExcValue);
+			Py_DecRef(pValueString);
 		}
 
 		if (pExcTraceback) {
 			PyObject* pRepr = PyObject_Repr(pExcTraceback);
+			PyObject *pTracebackString = PyUnicode_AsEncodedString(pRepr, "UTF-8", "strict");
+			char *excTracebackString = PyBytes_AsString(pTracebackString);
 			if (request) {
-				RIDEBUG("%s:%d, %s - Exception traceback: %s", __func__, __LINE__, funcname, PyBytes_AsString(pRepr));
+				RIDEBUG("%s:%d, %s - Exception traceback: %s", __func__, __LINE__, funcname, excTracebackString);
 			} else {
-				ERROR("%s:%d, %s - Exception traceback: %s", __func__, __LINE__, funcname, PyBytes_AsString(pRepr));
+				ERROR("%s:%d, %s - Exception traceback: %s", __func__, __LINE__, funcname, excTracebackString);
 			}
 			Py_DecRef(pRepr);
 			Py_DecRef(pExcTraceback);
+			Py_DecRef(pTracebackString);
 		}
 		/*
 		 * Clear the exception, so that the thread can continue processing 
