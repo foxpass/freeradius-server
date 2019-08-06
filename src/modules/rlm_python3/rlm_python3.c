@@ -711,9 +711,9 @@ finish:
 
 	if (ret == RLM_MODULE_FAIL) {
 		if (request) {
-			RIDEBUG("%s:%d, %s - Function did not return a tuple or None, request: %p", __func__, __LINE__, funcname, request);
+			RIDEBUG("%s:%d, %s - RLM_MODULE_FAIL, request: %p", __func__, __LINE__, funcname, request);
 		} else {
-			ERROR("%s:%d, %s - Function did not return a tuple or None, request: %p", __func__, __LINE__, funcname, request);
+			ERROR("%s:%d, %s - RLM_MODULE_FAIL, request: %p", __func__, __LINE__, funcname, request);
 		}
 	}
 	return ret;
