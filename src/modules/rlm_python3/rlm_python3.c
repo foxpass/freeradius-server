@@ -525,7 +525,7 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 		}
 
 		// get the error details
-		PyObject *pExcType, *pExcValue, *pExcTraceback;
+		PyObject *pExcType = NULL, *pExcValue = NULL, *pExcTraceback = NULL;
 		PyErr_Fetch(&pExcType, &pExcValue, &pExcTraceback);
 		if (request) {
 			RIDEBUG("%s:%d, %s - pExcType: %p, pExcvalue: %p, pExcTraceback: %p", __func__, __LINE__, funcname, pExcType, pExcValue, pExcTraceback);
@@ -533,8 +533,10 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 			ERROR("%s:%d, %s - pExcType: %p, pExcvalue: %p, pExcTraceback: %p", __func__, __LINE__, funcname, pExcType, pExcValue, pExcTraceback);
 		}
 
+		PyErr_NormalizeException(&pExcType, &pExcValue, &pExcTraceback);
+
 		if (pExcType) {
-			PyObject* pRepr = PyObject_Repr(pExcType);
+			PyObject *pRepr = PyObject_Repr(pExcType);
 			PyObject *pTypeString = PyUnicode_AsEncodedString(pRepr, "UTF-8", "strict");
 			char *excString = PyBytes_AsString(pTypeString);
 			if (request) {
@@ -542,13 +544,16 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 			} else {
 				ERROR("%s:%d, %s - Exception type: %s", __func__, __LINE__, funcname, excString);
 			}
+		    /*
+			 * Do not call Py_DecRef to 'pExcType', as this is needed to decode the traceback
+			 * This call will be made after decoding the traceback
+			 */
 			Py_DecRef(pRepr);
-			Py_DecRef(pExcType);
 			Py_DecRef(pTypeString);
 		}
 
 		if (pExcValue) {
-			PyObject* pRepr = PyObject_Repr(pExcValue);
+			PyObject *pRepr = PyObject_Repr(pExcValue);
 			PyObject *pValueString = PyUnicode_AsEncodedString(pRepr, "UTF-8", "strict");
 			char *excValueString = PyBytes_AsString(pValueString);
 			if (request) {
@@ -556,24 +561,71 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 			} else {
 				ERROR("%s:%d, %s - Exception value: %s", __func__, __LINE__, funcname, excValueString);
 			}
+		    /*
+			 * Do not call Py_DecRef to 'pExcValue', as this is needed to decode the traceback
+			 * This call will be made after decoding the traceback
+			 */
 			Py_DecRef(pRepr);
-			Py_DecRef(pExcValue);
 			Py_DecRef(pValueString);
 		}
 
 		if (pExcTraceback) {
-			PyObject* pRepr = PyObject_Repr(pExcTraceback);
-			PyObject *pTracebackString = PyUnicode_AsEncodedString(pRepr, "UTF-8", "strict");
-			char *excTracebackString = PyBytes_AsString(pTracebackString);
-			if (request) {
-				RIDEBUG("%s:%d, %s - Exception traceback: %s", __func__, __LINE__, funcname, excTracebackString);
+			PyObject *pRepr = PyObject_Repr(pExcTraceback);
+			PyObject *pystr, *module_name, *pyth_module;
+
+			module_name = PyUnicode_FromString("traceback");
+			pyth_module = PyImport_Import(module_name);
+
+			if (pyth_module) {
+		    	PyObject *pyth_func = PyObject_GetAttrString(pyth_module, "format_exception");
+
+				if (pyth_func && PyCallable_Check(pyth_func)) {
+					PyObject *pyth_val = PyObject_CallFunctionObjArgs(pyth_func, pExcType, pExcValue, pExcTraceback, NULL);
+					pystr = PyObject_Str(pyth_val);
+					PyObject* pTraceString = PyUnicode_AsEncodedString(pystr, "UTF-8", "strict");
+					char *str = PyBytes_AsString(pTraceString);
+					char *full_backtrace = strdup(str);
+					RIDEBUG("%s:%d, %s - full_backtrace: %s", __func__, __LINE__, funcname, full_backtrace);
+					if (full_backtrace) {
+						free (full_backtrace);
+					}
+
+					if (pyth_val) {
+						Py_DecRef(pyth_val);
+					}
+					if (pystr) {
+						Py_DecRef(pystr);
+					}
+					if (pTraceString) {
+						Py_DecRef(pTraceString);
+					}
+					Py_DecRef(pyth_module);
+				}
+				if (pyth_func) {
+					Py_DecRef(pyth_func);
+				}
+				Py_DecRef(pyth_module);
 			} else {
-				ERROR("%s:%d, %s - Exception traceback: %s", __func__, __LINE__, funcname, excTracebackString);
+				RIDEBUG("%s:%d, %s - py_module is null, name: %p", __func__, __LINE__, funcname, module_name);
 			}
+
+			if (module_name) {
+				Py_DecRef(module_name);
+			}
+
 			Py_DecRef(pRepr);
-			Py_DecRef(pExcTraceback);
-			Py_DecRef(pTracebackString);
 		}
+
+		if (pExcType) {
+			Py_DecRef(pExcType);
+		}
+		if (pExcValue) {
+			Py_DecRef(pExcValue);
+		}
+		if (pExcTraceback) {
+			Py_DecRef(pExcTraceback);
+		}
+
 		/*
 		 * Clear the exception, so that the thread can continue processing 
 		 */
