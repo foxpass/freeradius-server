@@ -544,7 +544,7 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 			} else {
 				ERROR("%s:%d, %s - Exception type: %s", __func__, __LINE__, funcname, excString);
 			}
-		    /*
+			/*
 			 * Do not call Py_DecRef to 'pExcType', as this is needed to decode the traceback
 			 * This call will be made after decoding the traceback
 			 */
@@ -561,7 +561,7 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 			} else {
 				ERROR("%s:%d, %s - Exception value: %s", __func__, __LINE__, funcname, excValueString);
 			}
-		    /*
+			/*
 			 * Do not call Py_DecRef to 'pExcValue', as this is needed to decode the traceback
 			 * This call will be made after decoding the traceback
 			 */
@@ -577,18 +577,14 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 			pyth_module = PyImport_Import(module_name);
 
 			if (pyth_module) {
-		    	PyObject *pyth_func = PyObject_GetAttrString(pyth_module, "format_exception");
+				PyObject *pyth_func = PyObject_GetAttrString(pyth_module, "format_exception");
 
 				if (pyth_func && PyCallable_Check(pyth_func)) {
 					PyObject *pyth_val = PyObject_CallFunctionObjArgs(pyth_func, pExcType, pExcValue, pExcTraceback, NULL);
 					pystr = PyObject_Str(pyth_val);
 					PyObject* pTraceString = PyUnicode_AsEncodedString(pystr, "UTF-8", "strict");
 					char *str = PyBytes_AsString(pTraceString);
-					char *full_backtrace = strdup(str);
-					RIDEBUG("%s:%d, %s - full_backtrace: %s", __func__, __LINE__, funcname, full_backtrace);
-					if (full_backtrace) {
-						free (full_backtrace);
-					}
+					RIDEBUG("%s:%d, %s - full_backtrace: %s", __func__, __LINE__, funcname, str);
 
 					if (pyth_val) {
 						Py_DecRef(pyth_val);
