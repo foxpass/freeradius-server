@@ -186,6 +186,7 @@ static void python_error_log(void)
 	PyErr_NormalizeException(&pExcType, &pExcValue, &pExcTraceback);
 
 	if (!pExcType || !pExcValue) {
+		ERROR("%s:%d, Unknown error", __func__, __LINE__, pExcType, pExcValue, pExcTraceback);
 		return;
 	}
 
@@ -490,11 +491,7 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 	 * If some list is not available, NONE is used instead
 	 */
 	if ((pArgs = PyTuple_New(6)) == NULL) {
-		if (request) {
-			RIDEBUG("%s:%d, %s - Memory cannot be allocated for PyTyple_New, request: %p", __func__, __LINE__, funcname, request);
-		} else {
-			ERROR("%s:%d, %s - Memory cannot be allocated for PyTyple_New, request: %p", __func__, __LINE__, funcname, request);
-		}
+		ERROR("%s:%d, %s - Memory cannot be allocated for PyTyple_New", __func__, __LINE__, funcname);
 		ret = RLM_MODULE_FAIL;
 		goto finish;
 	}
@@ -506,7 +503,7 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 		    !mod_populate_vps(pArgs, 2, request->config) ||
 		    !mod_populate_vps(pArgs, 3, request->state)) {
 
-			RIDEBUG("%s:%d, %s - mod_populate_vps failed, request: %p", __func__, __LINE__, funcname, request);
+			ERROR("%s:%d, %s - mod_populate_vps failed", __func__, __LINE__, funcname);
 			ret = RLM_MODULE_FAIL;
 			goto finish;
 		}
@@ -514,7 +511,7 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 		/* fill proxy vps */
 		if (request->proxy) {
 			if (!mod_populate_vps(pArgs, 4, request->proxy->vps)) {
-				RIDEBUG("%s:%d, %s - mod_populate_vps failed, request: %p", __func__, __LINE__, funcname, request);
+				ERROR("%s:%d, %s - mod_populate_vps failed", __func__, __LINE__, funcname);
 				ret = RLM_MODULE_FAIL;
 				goto finish;
 			}
@@ -525,7 +522,7 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 		/* fill proxy_reply vps */
 		if (request->proxy_reply) {
 			if (!mod_populate_vps(pArgs, 5, request->proxy_reply->vps)) {
-				RIDEBUG("%s:%d, %s - mod_populate_vps failed, request: %p", __func__, __LINE__, funcname, request);
+				ERROR("%s:%d, %s - mod_populate_vps failed", __func__, __LINE__, funcname);
 				ret = RLM_MODULE_FAIL;
 				goto finish;
 			}
@@ -554,11 +551,7 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 		    PyDict_SetItemString(pDictInput, "session-state", PyTuple_GET_ITEM(pArgs, 3)) ||
 		    PyDict_SetItemString(pDictInput, "proxy-request", PyTuple_GET_ITEM(pArgs, 4)) ||
 		    PyDict_SetItemString(pDictInput, "proxy-reply", PyTuple_GET_ITEM(pArgs, 5))) {
-			if (request) {
-				RIDEBUG("%s:%d, %s - PyDict_SetItemString failed, request: %p", __func__, __LINE__, funcname, request);
-			} else {
-				ERROR("%s:%d, %s - PyDict_SetItemString failed, request: %p", __func__, __LINE__, funcname, request);
-			}
+			ERROR("%s:%d, %s - PyDict_SetItemString failed", __func__, __LINE__, funcname);
 			ret = RLM_MODULE_FAIL;
 			goto finish;
 		}
@@ -570,7 +563,7 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 		pRet = PyObject_CallFunctionObjArgs(pFunc, PyTuple_GET_ITEM(pArgs, 0), NULL);
 
 	if (!pRet) {
-		ERROR("%s:%d, %s - pRet is NULL, request: %p", __func__, __LINE__, funcname, request);
+		ERROR("%s:%d, %s - pRet is NULL", __func__, __LINE__, funcname);
 		if (PyErr_Occurred()) {
 			python_error_log();
 		}
