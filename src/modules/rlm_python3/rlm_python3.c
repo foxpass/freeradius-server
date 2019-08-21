@@ -179,23 +179,90 @@ static struct PyModuleDef moduledef = {
  */
 static void python_error_log(void)
 {
-	PyObject *pType = NULL, *pValue = NULL, *pTraceback = NULL, *pStr1 = NULL, *pStr2 = NULL;
+	PyObject *pExcType = NULL, *pExcValue = NULL, *pExcTraceback = NULL;
+	PyErr_Fetch(&pExcType, &pExcValue, &pExcTraceback);
+	ERROR("%s:%d, pExcType: %p, pExcvalue: %p, pExcTraceback: %p", __func__, __LINE__, pExcType, pExcValue, pExcTraceback);
 
-	PyErr_Fetch(&pType, &pValue, &pTraceback);
-	if (!pType || !pValue)
-		goto failed;
-	if (((pStr1 = PyObject_Str(pType)) == NULL) ||
-	    ((pStr2 = PyObject_Str(pValue)) == NULL))
-		goto failed;
+	PyErr_NormalizeException(&pExcType, &pExcValue, &pExcTraceback);
 
-	ERROR("%s (%s)", PyUnicode_AsUTF8(pStr1), PyUnicode_AsUTF8(pStr2));
+	if (pExcType) {
+		PyObject *pRepr = PyObject_Repr(pExcType);
+		PyObject *pTypeString = PyUnicode_AsEncodedString(pRepr, "UTF-8", "strict");
+		char *excString = PyBytes_AsString(pTypeString);
+		ERROR("%s:%d, Exception type: %s", __func__, __LINE__, excString);
+		/*
+		 * Do not call Py_DecRef to 'pExcType', as this is needed to decode the traceback
+		 * This call will be made after decoding the traceback
+		 */
+		Py_DecRef(pRepr);
+		Py_DecRef(pTypeString);
+	}
 
-failed:
-	Py_XDECREF(pStr1);
-	Py_XDECREF(pStr2);
-	Py_XDECREF(pType);
-	Py_XDECREF(pValue);
-	Py_XDECREF(pTraceback);
+	if (pExcValue) {
+		PyObject *pRepr = PyObject_Repr(pExcValue);
+		PyObject *pValueString = PyUnicode_AsEncodedString(pRepr, "UTF-8", "strict");
+		char *excValueString = PyBytes_AsString(pValueString);
+		ERROR("%s:%d, Exception value: %s", __func__, __LINE__, excValueString);
+		/*
+		 * Do not call Py_DecRef to 'pExcValue', as this is needed to decode the traceback
+		 * This call will be made after decoding the traceback
+		 */
+		Py_DecRef(pRepr);
+		Py_DecRef(pValueString);
+	}
+
+	if (pExcTraceback) {
+		PyObject *pRepr = PyObject_Repr(pExcTraceback);
+		PyObject *pystr, *module_name, *pyth_module;
+
+		module_name = PyUnicode_FromString("traceback");
+		pyth_module = PyImport_Import(module_name);
+
+		if (pyth_module) {
+			PyObject *pyth_func = PyObject_GetAttrString(pyth_module, "format_exception");
+
+			if (pyth_func && PyCallable_Check(pyth_func)) {
+				PyObject *pyth_val = PyObject_CallFunctionObjArgs(pyth_func, pExcType, pExcValue, pExcTraceback, NULL);
+				pystr = PyObject_Str(pyth_val);
+				PyObject* pTraceString = PyUnicode_AsEncodedString(pystr, "UTF-8", "strict");
+				char *str = PyBytes_AsString(pTraceString);
+				ERROR("%s:%d, full_backtrace: %s", __func__, __LINE__, str);
+
+				if (pyth_val) {
+					Py_DecRef(pyth_val);
+				}
+				if (pystr) {
+					Py_DecRef(pystr);
+				}
+				if (pTraceString) {
+					Py_DecRef(pTraceString);
+				}
+				Py_DecRef(pyth_module);
+			}
+			if (pyth_func) {
+				Py_DecRef(pyth_func);
+			}
+			Py_DecRef(pyth_module);
+		} else {
+			ERROR("%s:%d, py_module is null, name: %p", __func__, __LINE__, module_name);
+		}
+
+		if (module_name) {
+			Py_DecRef(module_name);
+		}
+
+		Py_DecRef(pRepr);
+	}
+
+	if (pExcType) {
+		Py_DecRef(pExcType);
+	}
+	if (pExcValue) {
+		Py_DecRef(pExcValue);
+	}
+	if (pExcTraceback) {
+		Py_DecRef(pExcTraceback);
+	}
 }
 
 static void mod_vptuple(TALLOC_CTX *ctx, REQUEST *request, VALUE_PAIR **vps, PyObject *pValue,
@@ -336,14 +403,28 @@ static int mod_populate_vptuple(PyObject *pPair, VALUE_PAIR *vp)
 		pStr = PyUnicode_FromString(vp->da->name);
 	}
 
-	if (!pStr) return -1;
+	if (!pStr) {
+		ERROR("%s:%d, vp->da->name: %s", __func__, __LINE__, vp->da->name);
+		if (PyErr_Occurred()) {
+			python_error_log();
+		}
+		
+		return -1;
+	}
 
 	PyTuple_SET_ITEM(pPair, 0, pStr);
 
 	vp_prints_value(buf, sizeof(buf), vp, '\0');	/* Python doesn't need any escaping */
 
 	pStr = PyUnicode_FromString(buf);
-	if (pStr == NULL) return -1;
+
+	if (pStr == NULL) {
+		ERROR("%s:%d, vp->da->name: %s", __func__, __LINE__, vp->da->name);
+		if (PyErr_Occurred()) {
+			python_error_log();
+		}
+		return -1;
+	}
 
 	PyTuple_SET_ITEM(pPair, 1, pStr);
 
@@ -392,9 +473,9 @@ static bool mod_populate_vps(PyObject* pArgs, const int pos, VALUE_PAIR *vps)
 			/* Put the tuple inside the container */
 			PyTuple_SET_ITEM(vps_tuple, i, pPair);
 		} else {
-			Py_INCREF(Py_None);
-			PyTuple_SET_ITEM(vps_tuple, i, Py_None);
+			ERROR("%s:%d, vp->da->name: %s", __func__, __LINE__, vp->da->name);
 			Py_DECREF(pPair);
+			goto error;
 		}
 	}
 	PyTuple_SET_ITEM(pArgs, pos, vps_tuple);
@@ -511,121 +592,9 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 		 * Validate if the error occurred or not
 		 */
 		if (PyErr_Occurred()) {
-			if (request) {
-				RIDEBUG("%s:%d, %s - Python exception occurred for request: %p", __func__, __LINE__, funcname, request);
-			} else {
-				ERROR("%s:%d, %s - Python exception occurred, request: %p", __func__, __LINE__, funcname, request);
-			}
-		} else {
-			if (request) {
-				RIDEBUG("%s:%d, %s - Python exception NOT occurred for request: %p", __func__, __LINE__, funcname, request);
-			} else {
-				ERROR("%s:%d, %s - Python exception NOT occurred, request: %p", __func__, __LINE__, funcname, request);
-			}
+			ERROR("%s:%d, %s - Python exception occurred, request: %p", __func__, __LINE__, funcname, request);
+			python_error_log();
 		}
-
-		// get the error details
-		PyObject *pExcType = NULL, *pExcValue = NULL, *pExcTraceback = NULL;
-		PyErr_Fetch(&pExcType, &pExcValue, &pExcTraceback);
-		if (request) {
-			RIDEBUG("%s:%d, %s - pExcType: %p, pExcvalue: %p, pExcTraceback: %p", __func__, __LINE__, funcname, pExcType, pExcValue, pExcTraceback);
-		} else {
-			ERROR("%s:%d, %s - pExcType: %p, pExcvalue: %p, pExcTraceback: %p", __func__, __LINE__, funcname, pExcType, pExcValue, pExcTraceback);
-		}
-
-		PyErr_NormalizeException(&pExcType, &pExcValue, &pExcTraceback);
-
-		if (pExcType) {
-			PyObject *pRepr = PyObject_Repr(pExcType);
-			PyObject *pTypeString = PyUnicode_AsEncodedString(pRepr, "UTF-8", "strict");
-			char *excString = PyBytes_AsString(pTypeString);
-			if (request) {
-				RIDEBUG("%s:%d, %s - Exception type: %s", __func__, __LINE__, funcname, excString);
-			} else {
-				ERROR("%s:%d, %s - Exception type: %s", __func__, __LINE__, funcname, excString);
-			}
-			/*
-			 * Do not call Py_DecRef to 'pExcType', as this is needed to decode the traceback
-			 * This call will be made after decoding the traceback
-			 */
-			Py_DecRef(pRepr);
-			Py_DecRef(pTypeString);
-		}
-
-		if (pExcValue) {
-			PyObject *pRepr = PyObject_Repr(pExcValue);
-			PyObject *pValueString = PyUnicode_AsEncodedString(pRepr, "UTF-8", "strict");
-			char *excValueString = PyBytes_AsString(pValueString);
-			if (request) {
-				RIDEBUG("%s:%d, %s - Exception value: %s", __func__, __LINE__, funcname, excValueString);
-			} else {
-				ERROR("%s:%d, %s - Exception value: %s", __func__, __LINE__, funcname, excValueString);
-			}
-			/*
-			 * Do not call Py_DecRef to 'pExcValue', as this is needed to decode the traceback
-			 * This call will be made after decoding the traceback
-			 */
-			Py_DecRef(pRepr);
-			Py_DecRef(pValueString);
-		}
-
-		if (pExcTraceback) {
-			PyObject *pRepr = PyObject_Repr(pExcTraceback);
-			PyObject *pystr, *module_name, *pyth_module;
-
-			module_name = PyUnicode_FromString("traceback");
-			pyth_module = PyImport_Import(module_name);
-
-			if (pyth_module) {
-				PyObject *pyth_func = PyObject_GetAttrString(pyth_module, "format_exception");
-
-				if (pyth_func && PyCallable_Check(pyth_func)) {
-					PyObject *pyth_val = PyObject_CallFunctionObjArgs(pyth_func, pExcType, pExcValue, pExcTraceback, NULL);
-					pystr = PyObject_Str(pyth_val);
-					PyObject* pTraceString = PyUnicode_AsEncodedString(pystr, "UTF-8", "strict");
-					char *str = PyBytes_AsString(pTraceString);
-					RIDEBUG("%s:%d, %s - full_backtrace: %s", __func__, __LINE__, funcname, str);
-
-					if (pyth_val) {
-						Py_DecRef(pyth_val);
-					}
-					if (pystr) {
-						Py_DecRef(pystr);
-					}
-					if (pTraceString) {
-						Py_DecRef(pTraceString);
-					}
-					Py_DecRef(pyth_module);
-				}
-				if (pyth_func) {
-					Py_DecRef(pyth_func);
-				}
-				Py_DecRef(pyth_module);
-			} else {
-				RIDEBUG("%s:%d, %s - py_module is null, name: %p", __func__, __LINE__, funcname, module_name);
-			}
-
-			if (module_name) {
-				Py_DecRef(module_name);
-			}
-
-			Py_DecRef(pRepr);
-		}
-
-		if (pExcType) {
-			Py_DecRef(pExcType);
-		}
-		if (pExcValue) {
-			Py_DecRef(pExcValue);
-		}
-		if (pExcTraceback) {
-			Py_DecRef(pExcTraceback);
-		}
-
-		/*
-		 * Clear the exception, so that the thread can continue processing 
-		 */
-		PyErr_Clear();
 		ret = RLM_MODULE_FAIL;
 		goto finish;
 	}
