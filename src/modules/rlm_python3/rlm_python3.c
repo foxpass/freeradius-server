@@ -179,37 +179,20 @@ static struct PyModuleDef moduledef = {
  */
 static void python_error_log(void)
 {
-	PyObject *pExcType = NULL, *pExcValue = NULL, *pExcTraceback = NULL;
+	PyObject *pExcType = NULL, *pExcValue = NULL, *pExcTraceback = NULL, *pStr1 = NULL, *pStr2 = NULL;
 	PyErr_Fetch(&pExcType, &pExcValue, &pExcTraceback);
 	ERROR("%s:%d, pExcType: %p, pExcvalue: %p, pExcTraceback: %p", __func__, __LINE__, pExcType, pExcValue, pExcTraceback);
 
 	PyErr_NormalizeException(&pExcType, &pExcValue, &pExcTraceback);
 
-	if (pExcType) {
-		PyObject *pRepr = PyObject_Repr(pExcType);
-		PyObject *pTypeString = PyUnicode_AsEncodedString(pRepr, "UTF-8", "strict");
-		char *excString = PyBytes_AsString(pTypeString);
-		ERROR("%s:%d, Exception type: %s", __func__, __LINE__, excString);
-		/*
-		 * Do not call Py_DecRef to 'pExcType', as this is needed to decode the traceback
-		 * This call will be made after decoding the traceback
-		 */
-		Py_DecRef(pRepr);
-		Py_DecRef(pTypeString);
+	if (!pExcType || !pExcValue) {
+		return;
 	}
 
-	if (pExcValue) {
-		PyObject *pRepr = PyObject_Repr(pExcValue);
-		PyObject *pValueString = PyUnicode_AsEncodedString(pRepr, "UTF-8", "strict");
-		char *excValueString = PyBytes_AsString(pValueString);
-		ERROR("%s:%d, Exception value: %s", __func__, __LINE__, excValueString);
-		/*
-		 * Do not call Py_DecRef to 'pExcValue', as this is needed to decode the traceback
-		 * This call will be made after decoding the traceback
-		 */
-		Py_DecRef(pRepr);
-		Py_DecRef(pValueString);
-	}
+	if (((pStr1 = PyObject_Str(pExcType)) != NULL) && 
+	    ((pStr2 = PyObject_Str(pExcValue)) != NULL)) {
+		ERROR("%s:%d, Exception type: %s, Exception value: %s", __func__, __LINE__, PyUnicode_AsUTF8(pStr1), PyUnicode_AsUTF8(pStr2));
+	} 
 
 	if (pExcTraceback) {
 		PyObject *pRepr = PyObject_Repr(pExcTraceback);
@@ -262,6 +245,12 @@ static void python_error_log(void)
 	}
 	if (pExcTraceback) {
 		Py_DecRef(pExcTraceback);
+	}
+	if (pStr1) {
+		Py_DecRef(pStr1);
+	}
+	if (pStr2) {
+		Py_DecRef(pStr2);
 	}
 }
 
@@ -473,7 +462,6 @@ static bool mod_populate_vps(PyObject* pArgs, const int pos, VALUE_PAIR *vps)
 			/* Put the tuple inside the container */
 			PyTuple_SET_ITEM(vps_tuple, i, pPair);
 		} else {
-			ERROR("%s:%d, vp->da->name: %s", __func__, __LINE__, vp->da->name);
 			Py_DECREF(pPair);
 			goto error;
 		}
@@ -582,17 +570,8 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 		pRet = PyObject_CallFunctionObjArgs(pFunc, PyTuple_GET_ITEM(pArgs, 0), NULL);
 
 	if (!pRet) {
-		if (request) {
-			RIDEBUG("%s:%d, %s - pRet is NULL, request: %p", __func__, __LINE__, funcname, request);
-		} else {
-			ERROR("%s:%d, %s - pRet is NULL, request: %p", __func__, __LINE__, funcname, request);
-		}
-
-		/*
-		 * Validate if the error occurred or not
-		 */
+		ERROR("%s:%d, %s - pRet is NULL, request: %p", __func__, __LINE__, funcname, request);
 		if (PyErr_Occurred()) {
-			ERROR("%s:%d, %s - Python exception occurred, request: %p", __func__, __LINE__, funcname, request);
 			python_error_log();
 		}
 		ret = RLM_MODULE_FAIL;
