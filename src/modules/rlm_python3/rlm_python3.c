@@ -181,7 +181,6 @@ static void python_error_log(void)
 {
 	PyObject *pExcType = NULL, *pExcValue = NULL, *pExcTraceback = NULL, *pStr1 = NULL, *pStr2 = NULL;
 	PyErr_Fetch(&pExcType, &pExcValue, &pExcTraceback);
-	ERROR("%s:%d, pExcType: %p, pExcvalue: %p, pExcTraceback: %p", __func__, __LINE__, pExcType, pExcValue, pExcTraceback);
 
 	PyErr_NormalizeException(&pExcType, &pExcValue, &pExcTraceback);
 
@@ -221,7 +220,6 @@ static void python_error_log(void)
 				if (pTraceString) {
 					Py_DecRef(pTraceString);
 				}
-				Py_DecRef(pyth_module);
 			}
 			if (pyth_func) {
 				Py_DecRef(pyth_func);
