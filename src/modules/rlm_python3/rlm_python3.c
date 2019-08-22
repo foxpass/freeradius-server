@@ -185,7 +185,7 @@ static void python_error_log(void)
 	PyErr_NormalizeException(&pExcType, &pExcValue, &pExcTraceback);
 
 	if (!pExcType || !pExcValue) {
-		ERROR("%s:%d, Unknown error", __func__, __LINE__, pExcType, pExcValue, pExcTraceback);
+		ERROR("%s:%d, Unknown error", __func__, __LINE__);
 		return;
 	}
 
