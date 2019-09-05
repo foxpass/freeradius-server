@@ -611,7 +611,6 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 		if (tuple_size == 2) {
 			PyObject *updateDict = PyTuple_GET_ITEM(pRet, 1);
 			if (!PyDict_CheckExact(updateDict)) {
-				ERROR("%s - updateDict is not a dictionary", funcname);
 				ret = RLM_MODULE_FAIL;
 				ERROR("%s:%d, %s - updateDict is not dictionary", __func__, __LINE__, funcname);
 				goto finish;
