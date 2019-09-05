@@ -593,24 +593,14 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 		int tuple_size = PyTuple_GET_SIZE(pRet);
 
 		if (tuple_size < 2 || tuple_size > 3) {
-			ERROR("%s - Tuple must be (return, updateDict) or (return, replyTuple, configTuple)", funcname);
-			if (request) {
-				RIDEBUG("%s:%d, %s - tuple_size invalid, request: %p", __func__, __LINE__, funcname, request);
-			} else {
-				ERROR("%s:%d, %s - tuple_size invalid, request: %p", __func__, __LINE__, funcname, request);
-			}
+			ERROR("%s:%d, %s - Tuple must be (return, updateDict) or (return, replyTuple, configTuple)", __func__, __LINE__, funcname);
 			ret = RLM_MODULE_FAIL;
 			goto finish;
 		}
 
 		pTupleInt = PyTuple_GET_ITEM(pRet, 0);
 		if (!PyLong_CheckExact(pTupleInt)) {
-			ERROR("%s - First tuple element not an integer", funcname);
-			if (request) {
-				RIDEBUG("%s:%d, %s - First tuple element not an integer, request: %p", __func__, __LINE__, funcname, request);
-			} else {
-				ERROR("%s:%d, %s - First tuple element not an integer, request: %p", __func__, __LINE__, funcname, request);
-			}
+			ERROR("%s:%d, %s - First tuple element not an integer", __func__, __LINE__, funcname);
 			ret = RLM_MODULE_FAIL;
 			goto finish;
 		}
@@ -623,11 +613,7 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 			if (!PyDict_CheckExact(updateDict)) {
 				ERROR("%s - updateDict is not a dictionary", funcname);
 				ret = RLM_MODULE_FAIL;
-				if (request) {
-					RIDEBUG("%s:%d, %s - updateDict is not dictionary, request: %p", __func__, __LINE__, funcname, request);
-				} else {
-					ERROR("%s:%d, %s - updateDict is not dictionary, request: %p", __func__, __LINE__, funcname, request);
-				}
+				ERROR("%s:%d, %s - updateDict is not dictionary", __func__, __LINE__, funcname);
 				goto finish;
 			}
 			mod_vptuple(request->reply, request, &request->reply->vps,
@@ -668,11 +654,7 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 		/* Just an integer */
 		ret = PyLong_AsLong(pRet);
 		if (ret == RLM_MODULE_FAIL) {
-			if (request) {
-				RIDEBUG("%s:%d, %s - Function did not return a tuple or None, request: %p", __func__, __LINE__, funcname, request);
-			} else {
-				ERROR("%s:%d, %s - Function did not return a tuple or None, request: %p", __func__, __LINE__, funcname, request);
-			}
+			ERROR("%s:%d, %s - Function did not return a tuple or None", __func__, __LINE__, funcname);
 		}
 
 	} else if (pRet == Py_None) {
@@ -680,12 +662,7 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 		ret = RLM_MODULE_OK;
 	} else {
 		/* Not tuple or None */
-		ERROR("%s - Function did not return a tuple or None", funcname);
-		if (request) {
-			RIDEBUG("%s:%d, %s - Function did not return a tuple or None, request: %p", __func__, __LINE__, funcname, request);
-		} else {
-			ERROR("%s:%d, %s - Function did not return a tuple or None, request: %p", __func__, __LINE__, funcname, request);
-		}
+		ERROR("%s:%d, %s - Function did not return a tuple or None", __func__, __LINE__, funcname);
 		ret = RLM_MODULE_FAIL;
 		goto finish;
 	}
@@ -697,11 +674,7 @@ finish:
 	Py_XDECREF(pDictInput);
 
 	if (ret == RLM_MODULE_FAIL) {
-		if (request) {
-			RIDEBUG("%s:%d, %s - RLM_MODULE_FAIL, request: %p", __func__, __LINE__, funcname, request);
-		} else {
-			ERROR("%s:%d, %s - RLM_MODULE_FAIL, request: %p", __func__, __LINE__, funcname, request);
-		}
+		ERROR("%s:%d, %s - RLM_MODULE_FAIL", __func__, __LINE__, funcname);
 	}
 	return ret;
 }
