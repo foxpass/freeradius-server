@@ -186,6 +186,12 @@ static void python_error_log(void)
 
 	if (!pExcType || !pExcValue) {
 		ERROR("%s:%d, Unknown error", __func__, __LINE__);
+		if (pExcType) {
+			Py_DecRef(pExcType);
+		}
+		if (pExcValue) {
+			Py_DecRef(pExcValue);
+		}
 		return;
 	}
 
@@ -196,7 +202,7 @@ static void python_error_log(void)
 
 	if (pExcTraceback) {
 		PyObject *pRepr = PyObject_Repr(pExcTraceback);
-		PyObject *pystr, *module_name, *pyth_module;
+		PyObject *module_name, *pyth_module;
 
 		module_name = PyUnicode_FromString("traceback");
 		pyth_module = PyImport_Import(module_name);
@@ -206,7 +212,7 @@ static void python_error_log(void)
 
 			if (pyth_func && PyCallable_Check(pyth_func)) {
 				PyObject *pyth_val = PyObject_CallFunctionObjArgs(pyth_func, pExcType, pExcValue, pExcTraceback, NULL);
-				pystr = PyObject_Str(pyth_val);
+				PyObject *pystr = PyObject_Str(pyth_val);
 				PyObject* pTraceString = PyUnicode_AsEncodedString(pystr, "UTF-8", "strict");
 				char *str = PyBytes_AsString(pTraceString);
 				ERROR("%s:%d, full_backtrace: %s", __func__, __LINE__, str);
