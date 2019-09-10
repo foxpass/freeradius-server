@@ -655,13 +655,6 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 			mod_vptuple(request, request, &request->config,
 				    PyTuple_GET_ITEM(pRet, 2), funcname, "config");
 		}
-	} else if (PyLong_CheckExact(pRet)) {
-		/* Just an integer */
-		ret = PyLong_AsLong(pRet);
-		if (ret == RLM_MODULE_FAIL) {
-			ERROR("%s:%d, %s - Function did not return a tuple or None", __func__, __LINE__, funcname);
-		}
-
 	} else if (pRet == Py_None) {
 		/* returned 'None', return value defaults to "OK, continue." */
 		ret = RLM_MODULE_OK;
