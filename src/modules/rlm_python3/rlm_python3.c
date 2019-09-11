@@ -179,23 +179,84 @@ static struct PyModuleDef moduledef = {
  */
 static void python_error_log(void)
 {
-	PyObject *pType = NULL, *pValue = NULL, *pTraceback = NULL, *pStr1 = NULL, *pStr2 = NULL;
+	PyObject *pExcType = NULL, *pExcValue = NULL, *pExcTraceback = NULL, *pStr1 = NULL, *pStr2 = NULL;
+	PyErr_Fetch(&pExcType, &pExcValue, &pExcTraceback);
 
-	PyErr_Fetch(&pType, &pValue, &pTraceback);
-	if (!pType || !pValue)
-		goto failed;
-	if (((pStr1 = PyObject_Str(pType)) == NULL) ||
-	    ((pStr2 = PyObject_Str(pValue)) == NULL))
-		goto failed;
+	PyErr_NormalizeException(&pExcType, &pExcValue, &pExcTraceback);
 
-	ERROR("%s (%s)", PyUnicode_AsUTF8(pStr1), PyUnicode_AsUTF8(pStr2));
+	if (!pExcType || !pExcValue) {
+		ERROR("%s:%d, Unknown error", __func__, __LINE__);
+		if (pExcType) {
+			Py_DecRef(pExcType);
+		}
+		if (pExcValue) {
+			Py_DecRef(pExcValue);
+		}
+		return;
+	}
 
-failed:
-	Py_XDECREF(pStr1);
-	Py_XDECREF(pStr2);
-	Py_XDECREF(pType);
-	Py_XDECREF(pValue);
-	Py_XDECREF(pTraceback);
+	if (((pStr1 = PyObject_Str(pExcType)) != NULL) && 
+	    ((pStr2 = PyObject_Str(pExcValue)) != NULL)) {
+		ERROR("%s:%d, Exception type: %s, Exception value: %s", __func__, __LINE__, PyUnicode_AsUTF8(pStr1), PyUnicode_AsUTF8(pStr2));
+	} 
+
+	if (pExcTraceback) {
+		PyObject *pRepr = PyObject_Repr(pExcTraceback);
+		PyObject *module_name, *pyth_module;
+
+		module_name = PyUnicode_FromString("traceback");
+		pyth_module = PyImport_Import(module_name);
+
+		if (pyth_module) {
+			PyObject *pyth_func = PyObject_GetAttrString(pyth_module, "format_exception");
+
+			if (pyth_func && PyCallable_Check(pyth_func)) {
+				PyObject *pyth_val = PyObject_CallFunctionObjArgs(pyth_func, pExcType, pExcValue, pExcTraceback, NULL);
+				PyObject *pystr = PyObject_Str(pyth_val);
+				PyObject* pTraceString = PyUnicode_AsEncodedString(pystr, "UTF-8", "strict");
+				char *str = PyBytes_AsString(pTraceString);
+				ERROR("%s:%d, full_backtrace: %s", __func__, __LINE__, str);
+
+				if (pyth_val) {
+					Py_DecRef(pyth_val);
+				}
+				if (pystr) {
+					Py_DecRef(pystr);
+				}
+				if (pTraceString) {
+					Py_DecRef(pTraceString);
+				}
+			}
+			if (pyth_func) {
+				Py_DecRef(pyth_func);
+			}
+			Py_DecRef(pyth_module);
+		} else {
+			ERROR("%s:%d, py_module is null, name: %p", __func__, __LINE__, module_name);
+		}
+
+		if (module_name) {
+			Py_DecRef(module_name);
+		}
+
+		Py_DecRef(pRepr);
+	}
+
+	if (pExcType) {
+		Py_DecRef(pExcType);
+	}
+	if (pExcValue) {
+		Py_DecRef(pExcValue);
+	}
+	if (pExcTraceback) {
+		Py_DecRef(pExcTraceback);
+	}
+	if (pStr1) {
+		Py_DecRef(pStr1);
+	}
+	if (pStr2) {
+		Py_DecRef(pStr2);
+	}
 }
 
 static void mod_vptuple(TALLOC_CTX *ctx, REQUEST *request, VALUE_PAIR **vps, PyObject *pValue,
@@ -336,14 +397,28 @@ static int mod_populate_vptuple(PyObject *pPair, VALUE_PAIR *vp)
 		pStr = PyUnicode_FromString(vp->da->name);
 	}
 
-	if (!pStr) return -1;
+	if (!pStr) {
+		ERROR("%s:%d, vp->da->name: %s", __func__, __LINE__, vp->da->name);
+		if (PyErr_Occurred()) {
+			python_error_log();
+		}
+		
+		return -1;
+	}
 
 	PyTuple_SET_ITEM(pPair, 0, pStr);
 
 	vp_prints_value(buf, sizeof(buf), vp, '\0');	/* Python doesn't need any escaping */
 
 	pStr = PyUnicode_FromString(buf);
-	if (pStr == NULL) return -1;
+
+	if (pStr == NULL) {
+		ERROR("%s:%d, vp->da->name: %s", __func__, __LINE__, vp->da->name);
+		if (PyErr_Occurred()) {
+			python_error_log();
+		}
+		return -1;
+	}
 
 	PyTuple_SET_ITEM(pPair, 1, pStr);
 
@@ -392,9 +467,8 @@ static bool mod_populate_vps(PyObject* pArgs, const int pos, VALUE_PAIR *vps)
 			/* Put the tuple inside the container */
 			PyTuple_SET_ITEM(vps_tuple, i, pPair);
 		} else {
-			Py_INCREF(Py_None);
-			PyTuple_SET_ITEM(vps_tuple, i, Py_None);
 			Py_DECREF(pPair);
+			goto error;
 		}
 	}
 	PyTuple_SET_ITEM(pArgs, pos, vps_tuple);
@@ -421,6 +495,7 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 	 * If some list is not available, NONE is used instead
 	 */
 	if ((pArgs = PyTuple_New(6)) == NULL) {
+		ERROR("%s:%d, %s - Memory cannot be allocated for PyTyple_New", __func__, __LINE__, funcname);
 		ret = RLM_MODULE_FAIL;
 		goto finish;
 	}
@@ -431,6 +506,8 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 		    !mod_populate_vps(pArgs, 1, request->reply->vps) ||
 		    !mod_populate_vps(pArgs, 2, request->config) ||
 		    !mod_populate_vps(pArgs, 3, request->state)) {
+
+			ERROR("%s:%d, %s - mod_populate_vps failed", __func__, __LINE__, funcname);
 			ret = RLM_MODULE_FAIL;
 			goto finish;
 		}
@@ -438,6 +515,7 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 		/* fill proxy vps */
 		if (request->proxy) {
 			if (!mod_populate_vps(pArgs, 4, request->proxy->vps)) {
+				ERROR("%s:%d, %s - mod_populate_vps failed", __func__, __LINE__, funcname);
 				ret = RLM_MODULE_FAIL;
 				goto finish;
 			}
@@ -448,6 +526,7 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 		/* fill proxy_reply vps */
 		if (request->proxy_reply) {
 			if (!mod_populate_vps(pArgs, 5, request->proxy_reply->vps)) {
+				ERROR("%s:%d, %s - mod_populate_vps failed", __func__, __LINE__, funcname);
 				ret = RLM_MODULE_FAIL;
 				goto finish;
 			}
@@ -476,6 +555,7 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 		    PyDict_SetItemString(pDictInput, "session-state", PyTuple_GET_ITEM(pArgs, 3)) ||
 		    PyDict_SetItemString(pDictInput, "proxy-request", PyTuple_GET_ITEM(pArgs, 4)) ||
 		    PyDict_SetItemString(pDictInput, "proxy-reply", PyTuple_GET_ITEM(pArgs, 5))) {
+			ERROR("%s:%d, %s - PyDict_SetItemString failed", __func__, __LINE__, funcname);
 			ret = RLM_MODULE_FAIL;
 			goto finish;
 		}
@@ -487,6 +567,10 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 		pRet = PyObject_CallFunctionObjArgs(pFunc, PyTuple_GET_ITEM(pArgs, 0), NULL);
 
 	if (!pRet) {
+		ERROR("%s:%d, %s - pRet is NULL", __func__, __LINE__, funcname);
+		if (PyErr_Occurred()) {
+			python_error_log();
+		}
 		ret = RLM_MODULE_FAIL;
 		goto finish;
 	}
@@ -515,14 +599,14 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 		int tuple_size = PyTuple_GET_SIZE(pRet);
 
 		if (tuple_size < 2 || tuple_size > 3) {
-			ERROR("%s - Tuple must be (return, updateDict) or (return, replyTuple, configTuple)", funcname);
+			ERROR("%s:%d, %s - Tuple must be (return, updateDict) or (return, replyTuple, configTuple)", __func__, __LINE__, funcname);
 			ret = RLM_MODULE_FAIL;
 			goto finish;
 		}
 
 		pTupleInt = PyTuple_GET_ITEM(pRet, 0);
 		if (!PyLong_CheckExact(pTupleInt)) {
-			ERROR("%s - First tuple element not an integer", funcname);
+			ERROR("%s:%d, %s - First tuple element not an integer", __func__, __LINE__, funcname);
 			ret = RLM_MODULE_FAIL;
 			goto finish;
 		}
@@ -533,8 +617,8 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 		if (tuple_size == 2) {
 			PyObject *updateDict = PyTuple_GET_ITEM(pRet, 1);
 			if (!PyDict_CheckExact(updateDict)) {
-				ERROR("%s - updateDict is not a dictionary", funcname);
 				ret = RLM_MODULE_FAIL;
+				ERROR("%s:%d, %s - updateDict is not dictionary", __func__, __LINE__, funcname);
 				goto finish;
 			}
 			mod_vptuple(request->reply, request, &request->reply->vps,
@@ -574,13 +658,12 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 	} else if (PyLong_CheckExact(pRet)) {
 		/* Just an integer */
 		ret = PyLong_AsLong(pRet);
-
 	} else if (pRet == Py_None) {
 		/* returned 'None', return value defaults to "OK, continue." */
 		ret = RLM_MODULE_OK;
 	} else {
 		/* Not tuple or None */
-		ERROR("%s - Function did not return a tuple or None", funcname);
+		ERROR("%s:%d, %s - Function did not return a tuple or None", __func__, __LINE__, funcname);
 		ret = RLM_MODULE_FAIL;
 		goto finish;
 	}
@@ -591,6 +674,9 @@ finish:
 	Py_XDECREF(pRet);
 	Py_XDECREF(pDictInput);
 
+	if (ret == RLM_MODULE_FAIL) {
+		ERROR("%s:%d, %s - RLM_MODULE_FAIL", __func__, __LINE__, funcname);
+	}
 	return ret;
 }
 
