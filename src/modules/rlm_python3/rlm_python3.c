@@ -418,7 +418,7 @@ static int mod_populate_vptuple(PyObject *pPair, VALUE_PAIR *vp)
 		ERROR("%s:%d, vp->da->name: %s", __func__, __LINE__, vp->da->name);
 		if (PyErr_Occurred()) {
 			if (PyErr_ExceptionMatches(PyExc_UnicodeDecodeError)) {
-				python_error_log();
+				PyErr_Clear();
 				pStr = PyBytes_FromString(buf);
 				if (pStr == NULL) {
 					ERROR("%s:%d, vp->da->name: %s", __func__, __LINE__, vp->da->name);
