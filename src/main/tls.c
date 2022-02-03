@@ -903,12 +903,14 @@ int tls_handshake_recv(REQUEST *request, tls_session_t *ssn)
 		record_init(&ssn->dirty_in);
 	}
 
-	err = SSL_read(ssn->ssl, ssn->clean_out.data + ssn->clean_out.used,
-		       sizeof(ssn->clean_out.data) - ssn->clean_out.used);
-	if (err > 0) {
-		ssn->clean_out.used += err;
-		return 1;
-	}
+        /*
+         * Try doing a SSL handshake assuming we have all the data required.
+         * If not we try to prepare for more application data to be received which is done using `SSL_read`
+         */
+        err = SSL_do_handshake(ssn->ssl);
+        if (err < 0) {
+                goto prepare_pending;
+        }
 
 	if (!tls_error_io_log(request, ssn, err, "Failed reading from OpenSSL")) return 0;
 
@@ -998,7 +1000,7 @@ int tls_handshake_recv(REQUEST *request, tls_session_t *ssn)
 #else
 #error You must use a newer version of OpenSSL
 #endif
-
+prepare_pending:
 	err = BIO_ctrl_pending(ssn->from_ssl);
 	if (err > 0) {
 		err = BIO_read(ssn->from_ssl, ssn->dirty_out.data,
