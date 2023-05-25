@@ -93,6 +93,7 @@ static CONF_PARSER module_config[] = {
         { "cext_compat", FR_CONF_OFFSET(PW_TYPE_BOOLEAN, rlm_python_t, cext_compat), "yes" },
         { "pass_all_vps", FR_CONF_OFFSET(PW_TYPE_BOOLEAN, rlm_python_t, pass_all_vps), "no" },
         { "pass_all_vps_dict", FR_CONF_OFFSET(PW_TYPE_BOOLEAN, rlm_python_t, pass_all_vps_dict), "no" },
+        { "utf8_fail_as_bytes", FR_CONF_OFFSET(PW_TYPE_BOOLEAN, rlm_python_t, utf8_fail_as_bytes), "no" },
 
 	CONF_PARSER_TERMINATOR
 };
@@ -370,7 +371,7 @@ static void mod_vptuple(TALLOC_CTX *ctx, REQUEST *request, VALUE_PAIR **vps, PyO
  *	Pass the value-pair print strings in a tuple.
  *
  */
-static int mod_populate_vptuple(PyObject *pPair, VALUE_PAIR *vp)
+static int mod_populate_vptuple(PyObject *pPair, VALUE_PAIR *vp, utf8_fail_as_bytes)
 {
 	PyObject *pStr = NULL;
 	char buf[1024];
@@ -399,9 +400,28 @@ static int mod_populate_vptuple(PyObject *pPair, VALUE_PAIR *vp)
 	pStr = PyUnicode_FromString(buf);
 
 	if (pStr == NULL) {
-		ERROR("%s:%d, vp->da->name: %s", __func__, __LINE__, vp->da->name);
 		if (PyErr_Occurred()) {
-			python_error_log();
+			if (PyErr_ExceptionMatches(PyExc_UnicodeDecodeError)) {
+				if (utf8_fail_as_bytes) {
+					DEBUG("Conversion to Unicode failed, returning %s as bytes", vp->da->name);
+					PyErr_Clear();
+					pStr = PyBytes_FromString(buf);
+					if (pStr == NULL) {
+						ERROR("%s:%d, vp->da->name: %s", __func__, __LINE__, vp->da->name);
+						if (PyErr_Occurred()) {
+							python_error_log();
+						}
+						return -1;
+					}
+				} else {
+					DEBUG("String is invalid utf8, use 'utf8_fail_as_bytes' config to return as bytes");
+					return -1;
+				}
+			} else {
+				ERROR("%s:%d, vp->da->name: %s", __func__, __LINE__, vp->da->name);
+				python_error_log();
+				return -1;
+			}
 		}
 		return -1;
 	}
@@ -465,7 +485,7 @@ error:
 	return false;
 }
 
-static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char const *funcname, bool pass_all_vps, bool pass_all_vps_dict)
+static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char const *funcname, bool pass_all_vps, bool pass_all_vps_dict, bool utf8_fail_as_bytes)
 {
 	PyObject	*pRet = NULL;
 	PyObject	*pArgs = NULL;
@@ -488,10 +508,10 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 
 	/* If there is a request, fill in the first 4 attribute lists */
 	if (request != NULL) {
-		if (!mod_populate_vps(pArgs, 0, request->packet->vps) ||
-		    !mod_populate_vps(pArgs, 1, request->reply->vps) ||
-		    !mod_populate_vps(pArgs, 2, request->config) ||
-		    !mod_populate_vps(pArgs, 3, request->state)) {
+		if (!mod_populate_vps(pArgs, 0, request->packet->vps, utf8_fail_as_bytes) ||
+		    !mod_populate_vps(pArgs, 1, request->reply->vps, utf8_fail_as_bytes) ||
+		    !mod_populate_vps(pArgs, 2, request->config, utf8_fail_as_bytes) ||
+		    !mod_populate_vps(pArgs, 3, request->state, utf8_fail_as_bytes)) {
 
 			ERROR("%s:%d, %s - mod_populate_vps failed", __func__, __LINE__, funcname);
 			ret = RLM_MODULE_FAIL;
@@ -501,7 +521,7 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 #ifdef WITH_PROXY
 		/* fill proxy vps */
 		if (request->proxy) {
-			if (!mod_populate_vps(pArgs, 4, request->proxy->vps)) {
+			if (!mod_populate_vps(pArgs, 4, request->proxy->vps, utf8_fail_as_bytes)) {
 				ERROR("%s:%d, %s - mod_populate_vps failed", __func__, __LINE__, funcname);
 				ret = RLM_MODULE_FAIL;
 				goto finish;
@@ -509,13 +529,13 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 		} else
 #endif
 		{
-			mod_populate_vps(pArgs, 4, NULL);
+			mod_populate_vps(pArgs, 4, NULL, utf8_fail_as_bytes);
 		}
 
 #ifdef WITH_PROXY
 		/* fill proxy_reply vps */
 		if (request->proxy_reply) {
-			if (!mod_populate_vps(pArgs, 5, request->proxy_reply->vps)) {
+			if (!mod_populate_vps(pArgs, 5, request->proxy_reply->vps, utf8_fail_as_bytes)) {
 				ERROR("%s:%d, %s - mod_populate_vps failed", __func__, __LINE__, funcname);
 				ret = RLM_MODULE_FAIL;
 				goto finish;
@@ -523,12 +543,12 @@ static rlm_rcode_t do_python_single(REQUEST *request, PyObject *pFunc, char cons
 		} else
 #endif
 		{
-			mod_populate_vps(pArgs, 5, NULL);
+			mod_populate_vps(pArgs, 5, NULL, utf8_fail_as_bytes);
 		}
 
 	}
 	/* If there is no request, set all the elements to None */
-	else for (i = 0; i < 6; i++) mod_populate_vps(pArgs, i, NULL);
+	else for (i = 0; i < 6; i++) mod_populate_vps(pArgs, i, NULL, utf8_fail_as_bytes);
 
 	/*
 	 * Call Python function. If pass_all_vps_dict is true, a dictionary with the
