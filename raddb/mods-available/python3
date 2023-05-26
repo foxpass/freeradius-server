@@ -27,9 +27,9 @@ python3 {
 	# This option prevales over "pass_all_vps"
 #	pass_all_vps_dict = no
 
-    # Added by Foxpass: 
-    # Return a byte string if it a string can't be interpreted as UTF8
-#   utf8_fail_as_bytes = no
+	# Added by Foxpass: 
+	# Return a byte string if it a string can't be interpreted as UTF8
+#	utf8_fail_as_bytes = no
 
 #	mod_instantiate = ${.module}
 #	func_instantiate = instantiate
