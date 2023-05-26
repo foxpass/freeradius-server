@@ -371,7 +371,7 @@ static void mod_vptuple(TALLOC_CTX *ctx, REQUEST *request, VALUE_PAIR **vps, PyO
  *	Pass the value-pair print strings in a tuple.
  *
  */
-static int mod_populate_vptuple(PyObject *pPair, VALUE_PAIR *vp, utf8_fail_as_bytes)
+static int mod_populate_vptuple(PyObject *pPair, VALUE_PAIR *vp, bool utf8_fail_as_bytes)
 {
 	PyObject *pStr = NULL;
 	char buf[1024];
@@ -436,7 +436,7 @@ static int mod_populate_vptuple(PyObject *pPair, VALUE_PAIR *vp, utf8_fail_as_by
  * the indicated position in the tuple pArgs.
  * Returns false on error.
  */
-static bool mod_populate_vps(PyObject* pArgs, const int pos, VALUE_PAIR *vps)
+static bool mod_populate_vps(PyObject* pArgs, const int pos, VALUE_PAIR *vps, bool utf8_fail_as_bytes)
 {
 	PyObject *vps_tuple = NULL;
 	int tuplelen = 0;
@@ -469,7 +469,7 @@ static bool mod_populate_vps(PyObject* pArgs, const int pos, VALUE_PAIR *vps)
 		/* The inside tuple has two only: */
 		if ((pPair = PyTuple_New(2)) == NULL) goto error;
 
-		if (mod_populate_vptuple(pPair, vp) == 0) {
+		if (mod_populate_vptuple(pPair, vp, utf8_fail_as_bytes) == 0) {
 			/* Put the tuple inside the container */
 			PyTuple_SET_ITEM(vps_tuple, i, pPair);
 		} else {
@@ -824,7 +824,7 @@ static rlm_rcode_t do_python(rlm_python_t *inst, REQUEST *request, PyObject *pFu
 	RDEBUG3("Using thread state %p", this_thread->state);
 
 	PyEval_RestoreThread(this_thread->state);	/* Swap in our local thread state */
-	ret = do_python_single(request, pFunc, funcname, inst->pass_all_vps, inst->pass_all_vps_dict);
+	ret = do_python_single(request, pFunc, funcname, inst->pass_all_vps, inst->pass_all_vps_dict, inst->utf8_fail_as_bytes);
 	PyEval_SaveThread();
 
 	return ret;
@@ -1284,7 +1284,7 @@ static int mod_instantiate(CONF_SECTION *conf, void *instance)
 	 */
 	if (inst->instantiate.module_name && inst->instantiate.function_name) {
 
-		code = do_python_single(NULL, inst->instantiate.function, "instantiate", inst->pass_all_vps, inst->pass_all_vps_dict);
+		code = do_python_single(NULL, inst->instantiate.function, "instantiate", inst->pass_all_vps, inst->pass_all_vps_dict, inst->utf8_fail_as_bytes);
 		if (code < 0) {
 		error:
 			python_error_log();	/* Needs valid thread with GIL */
@@ -1307,7 +1307,7 @@ static int mod_detach(void *instance)
 	 */
 	PyEval_RestoreThread(inst->sub_interpreter);
 
-	if (inst->detach.function) ret = do_python_single(NULL, inst->detach.function, "detach", inst->pass_all_vps, inst->pass_all_vps_dict);
+	if (inst->detach.function) ret = do_python_single(NULL, inst->detach.function, "detach", inst->pass_all_vps, inst->pass_all_vps_dict, inst->utf8_fail_as_bytes);
 
 #define PYTHON_FUNC_DESTROY(_x) python_function_destroy(&inst->_x)
 	PYTHON_FUNC_DESTROY(instantiate);
