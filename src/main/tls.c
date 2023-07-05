@@ -63,6 +63,8 @@ USES_APPLE_DEPRECATED_API	/* OpenSSL API has been deprecated by Apple */
 
 #define LOG_PREFIX "tls"
 
+#define FIPS_mode(_x) EVP_default_properties_is_fips_enabled(NULL)
+
 #ifdef ENABLE_OPENSSL_VERSION_CHECK
 typedef struct libssl_defect {
 	uint64_t	high;
