@@ -2286,16 +2286,6 @@ static void remove_from_proxy_hash_nl(REQUEST *request, bool yank)
 
 	if (!request->in_proxy_hash) return;
 
-#ifdef COA_TUNNEL
-	/*
-	 *	Track how many IDs are used.  This information
-	 *	helps the listen_coa_find() function get a
-	 *	listener which has free IDs.
-	 */
-	rad_assert(request->proxy_listener->num_ids_used > 0);
-	request->proxy_listener->num_ids_used--;
-#endif
-
 	fr_packet_list_id_free(proxy_list, request->proxy, yank);
 	request->in_proxy_hash = false;
 
@@ -2341,6 +2331,18 @@ static void remove_from_proxy_hash_nl(REQUEST *request, bool yank)
 
 	if (request->proxy_listener) {
 		request->proxy_listener->count--;
+
+#ifdef WITH_COA_TUNNEL
+		/*
+		 *	Track how many IDs are used.  This information
+		 *	helps the listen_coa_find() function get a
+		 *	listener which has free IDs.
+		 */
+		if (request->proxy_listener->send_coa) {
+			rad_assert(request->proxy_listener->num_ids_used > 0);
+			request->proxy_listener->num_ids_used--;
+		}
+#endif
 	}
 	request->proxy_listener = NULL;
 
@@ -2493,13 +2495,13 @@ static int insert_into_proxy_hash(REQUEST *request)
 			goto fail;
 		}
 
-#ifdef COA_TUNNEL
+#ifdef WITH_COA_TUNNEL
 		/*
 		 *	Track how many IDs are used.  This information
 		 *	helps the listen_coa_find() function get a
 		 *	listener which has free IDs.
 		 */
-		request->proxy_listener->num_ids_used++;
+		if (request->proxy_listener->send_coa) request->proxy_listener->num_ids_used++;
 #endif
 
 		/*
@@ -2862,6 +2864,18 @@ int request_proxy_reply(RADIUS_PACKET *packet)
 	request->priority = RAD_LISTEN_PROXY;
 
 #ifdef WITH_STATS
+	/*
+	 *	The average includes our time to receive packets and
+	 *	look them up in the hashes, which should be the same
+	 *	for all packets.
+	 *
+	 *	We update the response time only for the FIRST packet
+	 *	we receive.
+	 */
+	if (request->home_server->ema.window > 0) {
+		radius_stats_ema(&request->home_server->ema, &request->proxy->timestamp, &now);
+	}
+
 	/*
 	 *	Update the proxy listener stats here, because only one
 	 *	thread accesses that at a time.  The home_server and
@@ -5386,7 +5400,6 @@ static void listener_free_cb(void *ctx)
 	talloc_free(this);
 }
 
-#ifdef WITH_TCP
 #ifdef WITH_PROXY
 static int proxy_eol_cb(void *ctx, void *data)
 {
@@ -5426,7 +5439,6 @@ static int proxy_eol_cb(void *ctx, void *data)
 	return 0;
 }
 #endif	/* WITH_PROXY */
-#endif	/* WITH_TCP */
 
 static void event_new_fd(rad_listen_t *this)
 {
@@ -5602,6 +5614,7 @@ static void event_new_fd(rad_listen_t *this)
 		 */
 		this->print(this, buffer, sizeof(buffer));
 		ERROR("Failed adding event handler for socket %s: %s", buffer, fr_strerror());
+
 		this->status = RAD_LISTEN_STATUS_EOL;
 		goto listener_is_eol;
 	} /* end of INIT */
@@ -5645,6 +5658,7 @@ static void event_new_fd(rad_listen_t *this)
 		fr_event_fd_delete(el, 0, this->fd);
 		this->status = RAD_LISTEN_STATUS_REMOVE_NOW;
 	}
+#endif	/* WITH_TCP */
 
 	/*
 	 *	The socket has had a catastrophic error.  Close it.
@@ -5708,7 +5722,6 @@ static void event_new_fd(rad_listen_t *this)
 		 */
 		this->status = RAD_LISTEN_STATUS_REMOVE_NOW;
 	} /* socket is at EOL */
-#endif	  /* WITH_TCP */
 
 	if (this->dead) goto wait_some_more;
 

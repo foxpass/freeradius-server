@@ -55,7 +55,7 @@ RCSID("$Id$")
 #ifdef WITH_TLS
 #include <netinet/tcp.h>
 
-#  ifdef __APPLE__
+#  if defined(__APPLE__) || defined(__FreeBSD__)
 #    if !defined(SOL_TCP) && defined(IPPROTO_TCP)
 #      define SOL_TCP IPPROTO_TCP
 #    endif
@@ -1466,6 +1466,8 @@ int common_socket_parse(CONF_SECTION *cs, rad_listen_t *this)
 			if (!this->tls) {
 				return -1;
 			}
+
+			this->tls->name = "RADIUS/TLS";
 
 #ifdef HAVE_PTHREAD_H
 			if (pthread_mutex_init(&sock->mutex, NULL) < 0) {
@@ -2907,6 +2909,9 @@ static int listen_bind(rad_listen_t *this)
 	 */
 	if (sock->interface) {
 #ifdef SO_BINDTODEVICE
+		/*
+		 *	Linux: Bind to an interface by name.
+		 */
 		struct ifreq ifreq;
 
 		memset(&ifreq, 0, sizeof(ifreq));
@@ -2919,45 +2924,81 @@ static int listen_bind(rad_listen_t *this)
 		if (rcode < 0) {
 			close(this->fd);
 			ERROR("Failed binding to interface %s: %s",
-			       sock->interface, fr_syserror(errno));
+			      sock->interface, fr_syserror(errno));
 			return -1;
-		} /* else it worked. */
+		}
 #else
+
+		/*
+		 *	If we don't bind to an interface by name, we usually bind to it by index.
+		 */
+		int idx = if_nametoindex(sock->interface);
+
+		if (idx == 0) {
+			close(this->fd);
+			ERROR("Failed finding interface %s: %s",
+			      sock->interface, fr_syserror(errno));
+			return -1;
+		}
+
+#ifdef IP_BOUND_IF
+		/*
+		 *	OSX / ?BSD / Solaris: bind to interface by index for IPv4
+		 */
+		if (sock->my_ipaddr.af == AF_INET) {
+			rad_suid_up();
+			rcode = setsockopt(this->fd, IPPROTO_IP, IP_BOUND_IF, &idx, sizeof(idx));
+			rad_suid_down();
+			if (rcode < 0) {
+				close(this->fd);
+				ERROR("Failed binding to interface %s: %s",
+				      sock->interface, fr_syserror(errno));
+				return -1;
+			}
+		} else
+#endif
+
+#ifdef IPV6_BOUND_IF
+		/*
+		 *	OSX / ?BSD / Solaris: bind to interface by index for IPv6
+		 */
+		if (sock->my_ipaddr.af == AF_INET6) {
+			rad_suid_up();
+			rcode = setsockopt(this->fd, IPPROTO_IPV6, IPV6_BOUND_IF, &idx, sizeof(idx));
+			rad_suid_down();
+			if (rcode < 0) {
+				close(this->fd);
+				ERROR("Failed binding to interface %s: %s",
+				      sock->interface, fr_syserror(errno));
+				return -1;
+			}
+		} else
+#endif
+
 #ifdef HAVE_STRUCT_SOCKADDR_IN6
 #ifdef HAVE_NET_IF_H
 		/*
-		 *	Odds are that any system supporting "bind to
-		 *	device" also supports IPv6, so this next bit
-		 *	isn't necessary.  But it's here for
-		 *	completeness.
-		 *
-		 *	If we're doing IPv6, and the scope hasn't yet
-		 *	been defined, set the scope to the scope of
-		 *	the interface.
+		 *	Otherwise generic IPv6: set the scope to the
+		 *	interface, and hope that all of the read/write
+		 *	routines respect that.
 		 */
 		if (sock->my_ipaddr.af == AF_INET6) {
 			if (sock->my_ipaddr.scope == 0) {
-				sock->my_ipaddr.scope = if_nametoindex(sock->interface);
-				if (sock->my_ipaddr.scope == 0) {
-					close(this->fd);
-					ERROR("Failed finding interface %s: %s",
-					       sock->interface, fr_syserror(errno));
-					return -1;
-				}
-			} /* else scope was defined: we're OK. */
+				sock->my_ipaddr.scope = idx;
+			} /* else scope was already defined */
 		} else
 #endif
 #endif
-				/*
-				 *	IPv4: no link local addresses,
-				 *	and no bind to device.
-				 */
+
+		/*
+		 *	IPv4, or no socket options to bind to interface.
+		 */
 		{
 			close(this->fd);
 			ERROR("Failed binding to interface %s: \"bind to device\" is unsupported", sock->interface);
 			return -1;
 		}
-#endif
+#endif	/* SO_BINDTODEVICE */
 	}
 
 #ifdef WITH_TCP
@@ -3067,6 +3108,7 @@ static int listen_bind(rad_listen_t *this)
 		int on = 1;
 
 		if (setsockopt(this->fd, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on)) < 0) {
+			close(this->fd);
 			ERROR("Can't set broadcast option: %s",
 			       fr_syserror(errno));
 			return -1;
@@ -3115,6 +3157,7 @@ static int listen_bind(rad_listen_t *this)
 			memset(&src, 0, sizeof_src);
 			if (getsockname(this->fd, (struct sockaddr *) &src,
 					&sizeof_src) < 0) {
+				close(this->fd);
 				ERROR("Failed getting socket name: %s",
 				       fr_syserror(errno));
 				return -1;
@@ -3122,6 +3165,7 @@ static int listen_bind(rad_listen_t *this)
 
 			if (!fr_sockaddr2ipaddr(&src, sizeof_src,
 						&sock->my_ipaddr, &sock->my_port)) {
+				close(this->fd);
 				ERROR("Socket has unsupported address family");
 				return -1;
 			}
@@ -3331,11 +3375,15 @@ rad_listen_t *proxy_new_listener(TALLOC_CTX *ctx, home_server_t *home, uint16_t 
 		 *	FIXME: connect() is blocking!
 		 *	We do this with the proxy mutex locked, which may
 		 *	cause large delays!
-		 *
-		 *	http://www.developerweb.net/forum/showthread.php?p=13486
 		 */
 		this->fd = fr_socket_client_tcp(&home->src_ipaddr,
-						&home->ipaddr, home->port, false);
+						&home->ipaddr, home->port,
+#ifdef WITH_TLS
+						!this->nonblock
+#else
+						false
+#endif
+			);
 
 		/*
 		 *	Set max_requests, lifetime, and idle_timeout from the home server.
@@ -3426,6 +3474,7 @@ rad_listen_t *proxy_new_listener(TALLOC_CTX *ctx, home_server_t *home, uint16_t 
 			goto error;
 		}
 #endif
+
 
 		sock->connect_timeout = home->connect_timeout;
 
@@ -3575,7 +3624,9 @@ static rad_listen_t *listen_parse(CONF_SECTION *cs, char const *server)
 	char const	*value;
 	fr_dlhandle	handle;
 	CONF_SECTION	*server_cs;
+#ifdef WITH_TCP
 	char const	*p;
+#endif
 	char		buffer[32];
 
 	cp = cf_pair_find(cs, "type");

@@ -52,8 +52,9 @@ struct sockaddr_ll ll;	/* Socket address structure */
 static char *iface = NULL;
 static int iface_ind = -1;
 
-#  define DEBUG			if (fr_debug_lvl && fr_log_fp) fr_printf_log
 #endif
+
+#  define DEBUG			if (fr_debug_lvl && fr_log_fp) fr_printf_log
 
 static RADIUS_PACKET *reply = NULL;
 
@@ -101,6 +102,7 @@ static void NEVER_RETURNS usage(void)
 #ifdef HAVE_LINUX_IF_PACKET_H
 	fprintf(stderr, "  -i <interface>         Use this interface to send/receive at packet level on a raw socket.\n");
 #endif
+	fprintf(stderr, "  -r <retries>           On timeout, retry sending the packet 'retries' times.\n");
 	fprintf(stderr, "  -t <timeout>           Wait 'timeout' seconds for a reply (may be a floating point number).\n");
 	fprintf(stderr, "  -v                     Show program version information.\n");
 	fprintf(stderr, "  -x                     Debugging mode.\n");
@@ -130,6 +132,7 @@ static RADIUS_PACKET *request_init(char const *filename)
 			return NULL;
 		}
 	} else {
+		DEBUG("Reading packets from stdin\n");
 		fp = stdin;
 	}
 

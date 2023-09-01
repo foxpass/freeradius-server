@@ -78,11 +78,6 @@ void eap_ds_free(EAP_DS **eap_ds_p)
 
 static int _eap_handler_free(eap_handler_t *handler)
 {
-	if (handler->identity) {
-		talloc_free(handler->identity);
-		handler->identity = NULL;
-	}
-
 	if (handler->prev_eapds) eap_ds_free(&(handler->prev_eapds));
 	if (handler->eap_ds) eap_ds_free(&(handler->eap_ds));
 
@@ -347,7 +342,9 @@ int eaplist_add(rlm_eap_t *inst, eap_handler_t *handler)
 	handler->state[4] = handler->trips ^ handler->state[0];
 	handler->state[5] = handler->eap_id ^ handler->state[1];
 	handler->state[6] = handler->type ^ handler->state[2];
-	handler->state[12] = handler->state[2] ^ (RADIUSD_VERSION & 0xff);
+	handler->state[8] = handler->state[2] ^ (((uint32_t) HEXIFY(RADIUSD_VERSION)) & 0xff);
+	handler->state[10] = handler->state[2] ^ ((((uint32_t) HEXIFY(RADIUSD_VERSION)) >> 8) & 0xff);
+	handler->state[12] = handler->state[2] ^ ((((uint32_t) HEXIFY(RADIUSD_VERSION)) >> 16) & 0xff);
 
 	fr_pair_value_memcpy(state, handler->state, sizeof(handler->state));
 

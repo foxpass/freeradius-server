@@ -1,3 +1,8 @@
+# Auto generated for rocky8
+# from scripts/docker/m4/Dockerfile.rpm.m4
+#
+# Rebuild this file with `make docker.rocky8.regen`
+#
 ARG from=rockylinux/rockylinux:8
 FROM ${from} as build
 
@@ -7,7 +12,9 @@ RUN rpmkeys --import /etc/pki/rpm-gpg/RPM-GPG-KEY-rockyofficial
 #  Install build tools
 #
 RUN yum groupinstall -y "Development Tools"
+
 RUN yum install -y rpmdevtools openssl dnf-utils
+
 
 #
 #  Create build directory
@@ -28,7 +35,7 @@ WORKDIR freeradius-server
 #  Other requirements
 #
 
-# Use LTB's openldap packages intead of the distribution version to avoid linking against NSS
+#  Use LTB's openldap packages intead of the distribution version to avoid linking against NSS
 RUN echo $'[ltb-project]\n\
 name=LTB project packages\n\
 baseurl=https://ltb-project.org/rpm/$releasever/$basearch\n\
@@ -38,17 +45,23 @@ gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-LTB-project'\
 > /etc/yum.repos.d/ltb-project.repo
 RUN rpm --import https://ltb-project.org/lib/RPM-GPG-KEY-LTB-project
 
-# EPEL repository for freetds and hiredis
+#  Enable EPEL repository for freetds and hiredis
 RUN yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
 
+#  Enable powertools repo
 RUN yum config-manager --enable powertools
-# Currently needed for hiredis-devel
+
+#  Enable epel-testing, currently needed for hiredis-devel
 RUN yum config-manager --enable epel-testing
 
 #
 #  Install build dependencies
 #
-RUN [ -e redhat/freeradius.spec ] && yum-builddep -y redhat/freeradius.spec
+#  Run twice, it doesn't always get everything with one invocation
+#
+RUN [ -e redhat/freeradius.spec ] && \
+	yum-builddep -y redhat/freeradius.spec && \
+	yum-builddep -y redhat/freeradius.spec
 
 #
 #  Create RPM build environment
@@ -86,10 +99,11 @@ enabled=1\n\
 gpgcheck=1\n\
 gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-LTB-project'\
 > /etc/yum.repos.d/ltb-project.repo \
-    && rpm --import https://ltb-project.org/lib/RPM-GPG-KEY-LTB-project \
-    \
-# EPEL repository for freetds and hiredis
-    && yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm \
+    && rpm --import https://ltb-project.org/lib/RPM-GPG-KEY-LTB-project
+
+
+#  EPEL repository for freetds and hiredis
+RUN yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm \
     && yum install -y dnf-utils \
     && yum config-manager --enable epel-testing
 

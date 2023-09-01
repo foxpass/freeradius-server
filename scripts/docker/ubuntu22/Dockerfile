@@ -1,3 +1,8 @@
+# Auto generated for ubuntu22
+# from scripts/docker/m4/Dockerfile.deb.m4
+#
+# Rebuild this file with `make docker.ubuntu22.regen`
+#
 ARG from=ubuntu:22.04
 FROM ${from} as build
 
@@ -46,8 +51,6 @@ COPY --from=build /usr/local/src/repositories/*.deb /tmp/
 
 ARG freerad_uid=101
 ARG freerad_gid=101
-
-ARG DEBIAN_FRONTEND=noninteractive
 
 RUN groupadd -g ${freerad_gid} -r freerad \
     && useradd -u ${freerad_uid} -g freerad -r -M -d /etc/freeradius -s /usr/sbin/nologin freerad \

@@ -1,5 +1,11 @@
-ARG from=centos:centos7
+# Auto generated for centos7
+# from scripts/docker/m4/Dockerfile.rpm.m4
+#
+# Rebuild this file with `make docker.centos7.regen`
+#
+ARG from=centos:7
 FROM ${from} as build
+
 
 #
 #  Install build tools
@@ -7,6 +13,7 @@ FROM ${from} as build
 RUN yum groupinstall -y "Development Tools"
 RUN yum install -y rpmdevtools
 RUN yum install -y openssl
+
 
 #
 #  Create build directory
@@ -27,7 +34,7 @@ WORKDIR freeradius-server
 #  Other requirements
 #
 
-# Use LTB's openldap packages intead of the distribution version to avoid linking against NSS
+#  Use LTB's openldap packages intead of the distribution version to avoid linking against NSS
 RUN echo $'[ltb-project]\n\
 name=LTB project packages\n\
 baseurl=https://ltb-project.org/rpm/$releasever/$basearch\n\
@@ -37,13 +44,17 @@ gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-LTB-project'\
 > /etc/yum.repos.d/ltb-project.repo
 RUN rpm --import https://ltb-project.org/lib/RPM-GPG-KEY-LTB-project
 
-# EPEL repository for freetds and hiredis
+#  Enable EPEL repository for freetds and hiredis
 RUN yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 
 #
 #  Install build dependencies
 #
-RUN [ -e redhat/freeradius.spec ] && yum-builddep -y redhat/freeradius.spec
+#  Run twice, it doesn't always get everything with one invocation
+#
+RUN [ -e redhat/freeradius.spec ] && \
+	yum-builddep -y redhat/freeradius.spec && \
+	yum-builddep -y redhat/freeradius.spec
 
 #
 #  Create RPM build environment
@@ -81,10 +92,11 @@ enabled=1\n\
 gpgcheck=1\n\
 gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-LTB-project'\
 > /etc/yum.repos.d/ltb-project.repo \
-    && rpm --import https://ltb-project.org/lib/RPM-GPG-KEY-LTB-project \
-    \
-# EPEL repository for freetds and hiredis
-    && yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm \
+    && rpm --import https://ltb-project.org/lib/RPM-GPG-KEY-LTB-project
+
+
+#  EPEL repository for freetds and hiredis
+RUN yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm \
     \
     && yum install -y /tmp/*.rpm
 

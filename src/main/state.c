@@ -379,6 +379,12 @@ static void fr_state_cleanup(state_entry_t *head)
 			request_inject(request);
 		}
 
+		if (entry->opaque) {
+			entry->free_opaque(entry->opaque);
+		}
+
+		if (entry->ctx) talloc_free(entry->ctx);
+
 		talloc_free(entry);
 	}
 }
@@ -438,9 +444,9 @@ static state_entry_t *fr_state_entry_create(fr_state_t *state, REQUEST *request,
 			memcpy(entry->state, old->state, sizeof(entry->state));
 
 			entry->state[1] = entry->state[0] ^ entry->tries;
-			entry->state[8] = entry->state[2] ^ ((((uint32_t) HEXIFY(RADIUSD_VERSION)) >> 16) & 0xff);
+			entry->state[8] = entry->state[2] ^ (((uint32_t) HEXIFY(RADIUSD_VERSION)) & 0xff);
 			entry->state[10] = entry->state[2] ^ ((((uint32_t) HEXIFY(RADIUSD_VERSION)) >> 8) & 0xff);
-			entry->state[12] = entry->state[2] ^ (((uint32_t) HEXIFY(RADIUSD_VERSION)) & 0xff);
+			entry->state[12] = entry->state[2] ^ ((((uint32_t) HEXIFY(RADIUSD_VERSION)) >> 16) & 0xff);
 		}
 
 		/*

@@ -271,6 +271,7 @@ $INCLUDE dictionary.nokia
 $INCLUDE dictionary.nomadix
 $INCLUDE dictionary.nortel
 $INCLUDE dictionary.ntua
+$INCLUDE dictionary.openwifi
 $INCLUDE dictionary.packeteer
 $INCLUDE dictionary.paloalto
 $INCLUDE dictionary.patton
@@ -296,6 +297,7 @@ $INCLUDE dictionary.shasta
 $INCLUDE dictionary.shiva
 $INCLUDE dictionary.siemens
 $INCLUDE dictionary.slipstream
+$INCLUDE dictionary.smartsharesystems
 $INCLUDE dictionary.sofaware
 $INCLUDE dictionary.softbank
 $INCLUDE dictionary.sonicwall

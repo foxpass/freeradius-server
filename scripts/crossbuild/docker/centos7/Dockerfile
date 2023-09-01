@@ -1,11 +1,18 @@
-FROM centos:centos7
+# Auto generated for centos7
+# from scripts/crossbuild/m4/Dockerfile.rpm.m4
+#
+# Rebuild this file with `make crossbuild.centos7.regen`
+#
+ARG from=centos:7
+FROM ${from} as build
 
 #
 #  Install devtools like make and git and the EPEL
 #  repository for freetds and hiredis
 #
 RUN yum update -y
-RUN yum install -y rpmdevtools openssl epel-release git yum-utils rsync
+RUN yum install -y rpmdevtools openssl epel-release git procps yum-utils \
+	rsync 
 
 #
 #  Install GCC that has the requisite support for C11 keywords and atomics
@@ -21,6 +28,8 @@ ENV CC=/opt/rh/devtoolset-8/root/usr/bin/gcc
 RUN rm /etc/yum.repos.d/CentOS-SCLo-scl-rh.repo
 RUN rm /etc/yum.repos.d/CentOS-SCLo-scl.repo
 
+
+
 #
 #  Documentation build dependecies
 #
@@ -28,12 +37,11 @@ RUN rm /etc/yum.repos.d/CentOS-SCLo-scl.repo
 #  - doxygen & JSON.pm
 RUN yum install -y doxygen graphviz perl-JSON
 #  - antora (npm needed)
-RUN curl -sL https://rpm.nodesource.com/setup_10.x | bash -
+RUN curl -sL https://rpm.nodesource.com/setup_14.x | bash -
 RUN yum install -y nodejs
 RUN npm i -g @antora/cli@2.1 @antora/site-generator-default@2.1
 #  - pandoc
 RUN curl -o - -L $(curl -s https://api.github.com/repos/jgm/pandoc/releases/latest | grep "browser_download_url.*tar.gz" | cut -d '"' -f 4) | tar xzvf - -C /tmp/
-# "
 RUN mv /tmp/pandoc-*/bin/* /usr/local/bin
 #  - asciidoctor
 RUN yum install -y rubygems-devel
@@ -85,8 +93,8 @@ RUN yum install -y which
 #
 RUN yum install -y libnl3-devel
 
+
 #
 #  Create the RPM build tree
 #
-ENV BUILDDIR=/root/rpmbuild
 RUN rpmdev-setuptree

@@ -1121,6 +1121,8 @@ home_server_t *home_server_afrom_cs(TALLOC_CTX *ctx, realm_config_t *rc, CONF_SE
 				goto error;
 			}
 
+			home->tls->name = "RADIUS/TLS";
+
 			/*
 			 *	Connection timeouts for outgoing TLS connections.
 			 */
@@ -3181,7 +3183,7 @@ int home_server_afrom_file(char const *filename)
 		goto error;
 	}
 
-#ifdef COA_TUNNEL
+#ifdef WITH_COA_TUNNEL
 	if (home->recv_coa) {
 		fr_strerror_printf("Dynamic home_server '%s' cannot receive CoA requests'", p);
 		talloc_free(home);
