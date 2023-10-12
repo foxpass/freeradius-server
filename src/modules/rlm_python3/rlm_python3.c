@@ -404,7 +404,6 @@ static int mod_populate_vptuple(PyObject *pPair, VALUE_PAIR *vp, bool utf8_fail_
 			if (PyErr_ExceptionMatches(PyExc_UnicodeDecodeError)) {
 				if (utf8_fail_as_bytes) {
 					DEBUG("Conversion to Unicode failed, returning %s as bytes", vp->da->name);
-					PyErr_Clear();
 					pStr = PyBytes_FromString(buf);
 					if (pStr == NULL) {
 						ERROR("%s:%d, vp->da->name: %s", __func__, __LINE__, vp->da->name);
@@ -422,6 +421,7 @@ static int mod_populate_vptuple(PyObject *pPair, VALUE_PAIR *vp, bool utf8_fail_
 				python_error_log();
 				return -1;
 			}
+			PyErr_Clear();
 		}
 		return -1;
 	}
