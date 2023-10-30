@@ -695,6 +695,10 @@ finish:
 
 	if (ret == RLM_MODULE_FAIL) {
 		ERROR("%s:%d, %s - RLM_MODULE_FAIL", __func__, __LINE__, funcname);
+		if (PyErr_Occurred()) {
+ 			python_error_log();
+  			PyErr_Clear();
+		}
 	}
 	return ret;
 }
