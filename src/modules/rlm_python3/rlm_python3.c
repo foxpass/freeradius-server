@@ -698,7 +698,7 @@ finish:
 	}
 
 	if (PyErr_Occurred()) {
-		ERROR("Unhandled Python exception (see above); clearing");
+		ERROR("Unhandled Python exception (see below); clearing.");
 		python_error_log();
  		PyErr_Clear();
 	}
