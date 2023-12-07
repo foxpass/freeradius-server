@@ -29,7 +29,7 @@ python3 {
 
 	# Return a byte string if the string has characters that can't be interpreted as UTF8.
 	# Otherwise, when invalid UTF8 is encountered, the module errors out.
-#	utf8_fail_as_bytes = no
+	utf8_fail_as_bytes = yes
 
 #	mod_instantiate = ${.module}
 #	func_instantiate = instantiate
