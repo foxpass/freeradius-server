@@ -777,18 +777,33 @@ static int dual_tcp_recv(rad_listen_t *listener)
 	RADCLIENT	*client = sock->client;
 	REQUEST		*request = sock->request;
 
+	char *eos;
+    unsigned long num;
+    int src_port, dst_port;
+    ssize_t len;
+    uint8_t *proxy_header;
+    uint8_t const *p;
+    uint8_t const *start;
+    uint8_t const *eol;
+    int af;
+    char *argv[5];
+	int argc;
+	uint8_t proxy_protocol_parsed = 0;
+	// parse the ip, port
+    fr_ipaddr_t src, dst;
+
 	rad_assert(client != NULL);
 
 	if (listener->status != RAD_LISTEN_STATUS_KNOWN) return 0;
 
         if (listener->proxy_protocol) {
-                rcode = proxy_protocol_check(listener, request);
-                if (rcode < 0) {
-                        RDEBUG("(TCP) Closing PROXY TCP socket from client port %u", sock->other_port);
+                // rcode = proxy_protocol_check(listener, request);
+                // if (rcode < 0) {
+                //        RDEBUG("(TCP) Closing PROXY TCP socket from client port %u", sock->other_port);
                         // close it? tls_socket_close(listener);
-                        return 0;
-                }
-                if (rcode == 0) return 1;
+                //        return 0;
+                // }
+                // if (rcode == 0) return 1;
 
                 /*
                  *      The buffer might already have data.  In that
@@ -796,6 +811,95 @@ static int dual_tcp_recv(rad_listen_t *listener)
                  *      later.
                  */
                 // already_read = (sock->ssn->dirty_in.used > 0);
+                // if (!sock->packet) {
+                //   fprintf(stderr, "initializing sock->packet\n");
+                //   sock->packet = rad_alloc(sock, false);
+                //   sock->packet->sockfd = listener->fd;
+                // }
+
+
+                // Let's see if the PROXY line is well-formed
+
+                // proxy_header = talloc_array(sock, uint8_t, 107);
+                uint8_t proxy_header[107];
+                len = recv(listener->fd, proxy_header, 107, MSG_PEEK);
+                fprintf(stderr, "received data of length: %d\n", len);
+
+                // read to make sense of the header "PROXY TCP"
+                if (memcmp(proxy_header, "PROXY TCP", 9) == 0) {
+                    fprintf(stderr, "received proxy protocol header\n");
+                    // extract the fields now
+                    p = proxy_header;
+                    start = proxy_header;
+                    while ((p + 1) < proxy_header + 107) {
+		                if ((p[0] == 0x0d) && (p[1] == 0x0a)) {
+			               eol = p;
+			               fprintf(stderr, "found ctrl character within length: %d\n", eol - start);
+			               break;
+		                }
+		                /*
+		                 *	Other control characters, or non-ASCII data.
+		                 *	That's a problem.
+		                 */
+		                if ((*p < ' ') || (*p >= 0x80)) {
+		                    invalid_data:
+			                  DEBUG("(TLS) Closing PROXY socket from client port %u - received invalid data", sock->other_port);
+			                  return -1;
+		                }
+		                p++;
+	                }
+
+	                p = proxy_header;
+                    p += 9;
+                    fprintf(stderr, "af_inet: %c\n", *p);
+
+	                if (*p == '4') {
+		                 af = AF_INET;
+		            }
+	                if (*p == '6') {
+		                 af = AF_INET6;
+                    }
+
+                    p++;
+	                if (*p != ' ') goto invalid_data;
+	                p++;
+
+	                proxy_header[eol - proxy_header] = '\0';
+
+	                argc = str2argv((char *) p, (char **) &argv, 5);
+                    fprintf(stderr, "arg count: %d\n", argc);
+
+                    for (size_t i = 0; i < 4; i++) {
+                         fprintf(stderr, "%s\n", argv[i]);
+                    }
+
+                    memset(&src, 0, sizeof(src));
+	                memset(&dst, 0, sizeof(dst));
+
+	                if (fr_pton(&src, argv[0], -1, af, false) < 0) goto invalid_data;
+	                if (fr_pton(&dst, argv[1], -1, af, false) < 0) goto invalid_data;
+
+
+	                num = strtoul(argv[2], &eos, 10);
+	                if (num > 65535) goto invalid_data;
+	                if (*eos) goto invalid_data;
+	                src_port = num;
+
+	                num = strtoul(argv[3], &eos, 10);
+	                if (num > 65535) goto invalid_data;
+	                if (*eos) goto invalid_data;
+	                dst_port = num;
+
+	                fprintf(stderr, "src_port: %d, dst_port: %d\n", src_port, dst_port);
+
+	                proxy_protocol_parsed = 1;
+
+	                // read the proxy header and remove from the stream
+	                len = recv(listener->fd, proxy_header, (eol - proxy_header)+2, 0);
+	                fprintf(stderr, "removing %d bytes\n", len);
+                }
+                fprintf(stderr, "finished printing and processing \n");
+                listener->proxy_protocol = false;
         }
 
 	/*
@@ -803,14 +907,38 @@ static int dual_tcp_recv(rad_listen_t *listener)
 	 */
 	if (!sock->packet) {
 		sock->packet = rad_alloc(sock, false);
+		fprintf(stderr, "allocated buffer for radius packet\n");
 		if (!sock->packet) return 0;
 
 		sock->packet->sockfd = listener->fd;
-		sock->packet->src_ipaddr = sock->other_ipaddr;
-		sock->packet->src_port = sock->other_port;
-		sock->packet->dst_ipaddr = sock->my_ipaddr;
-		sock->packet->dst_port = sock->my_port;
-		sock->packet->proto = sock->proto;
+
+		if (proxy_protocol_parsed) {
+		   fprintf(stderr, "proxy protocol parsed \n");
+		   sock->haproxy_src_ipaddr = sock->other_ipaddr;
+	       sock->haproxy_src_port = sock->other_port;
+
+	       sock->haproxy_dst_ipaddr = sock->my_ipaddr;
+	       sock->haproxy_dst_port = sock->my_port;
+
+	       sock->my_ipaddr = dst;
+	       sock->my_port = dst_port;
+
+	       sock->other_ipaddr = src;
+	       sock->other_port = src_port;
+
+	       sock->packet->src_ipaddr = sock->other_ipaddr;
+		   sock->packet->src_port = sock->other_port;
+		   sock->packet->dst_ipaddr = sock->my_ipaddr;
+		   sock->packet->dst_port = sock->my_port;
+		   sock->packet->proto = sock->proto;
+
+		} else {
+		   sock->packet->src_ipaddr = sock->other_ipaddr;
+		   sock->packet->src_port = sock->other_port;
+		   sock->packet->dst_ipaddr = sock->my_ipaddr;
+		   sock->packet->dst_port = sock->my_port;
+		   sock->packet->proto = sock->proto;
+		}
 	}
 
 	/*

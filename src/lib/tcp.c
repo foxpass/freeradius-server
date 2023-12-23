@@ -69,6 +69,8 @@ int fr_tcp_read_packet(RADIUS_PACKET *packet, int flags)
 
 		len = recv(packet->sockfd, packet->vector + packet->data_len,
 			   4 - packet->data_len, 0);
+
+	    fprintf(stderr, "packet length: %d.... packet data is not defined...\n", len);
 		if (len == 0) return -2; /* clean close */
 
 #ifdef ECONNRESET
@@ -90,6 +92,8 @@ int fr_tcp_read_packet(RADIUS_PACKET *packet, int flags)
 
 		packet_len = (packet->vector[2] << 8) | packet->vector[3];
 
+		fprintf(stderr, "radius packet length is: %d....\n", packet_len);
+
 		if (packet_len < RADIUS_HDR_LEN) {
 			fr_strerror_printf("Discarding packet: Smaller than RFC minimum of 20 bytes");
 			return -1;
@@ -110,6 +114,7 @@ int fr_tcp_read_packet(RADIUS_PACKET *packet, int flags)
 		}
 
 		packet->data_len = packet_len;
+		fprintf(stderr, "data_len: %d...\n", packet->data_len);
 		packet->partial = 4;
 		memcpy(packet->data, packet->vector, 4);
 	}
@@ -121,20 +126,27 @@ int fr_tcp_read_packet(RADIUS_PACKET *packet, int flags)
 		   packet->data_len - packet->partial, 0);
 	if (len == 0) return -2; /* clean close */
 
+	fprintf(stderr, "packet length: %d.......\n", len);
+
 #ifdef ECONNRESET
 	if ((len < 0) && (errno == ECONNRESET)) { /* forced */
+	    fprintf(stderr, "ECONNRESET.......\n");
 		return -2;
 	}
 #endif
 
 	if (len < 0) {
+	    fprintf(stderr, "Error receiving packet.......\n");
 		fr_strerror_printf("Error receiving packet: %s", fr_syserror(errno));
 		return -1;
 	}
 
 	packet->partial += len;
 
+	fprintf(stderr, "%d < %d \n", packet->partial, packet->data_len);
+
 	if (packet->partial < packet->data_len) {
+	    fprintf(stderr, "(packet->partial < packet->data_len)....");
 		return 0;
 	}
 

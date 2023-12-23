@@ -2517,6 +2517,7 @@ bool rad_packet_ok(RADIUS_PACKET *packet, int flags, decode_fail_t *reason)
 	uint32_t		num_attributes;
 	decode_fail_t		failure = DECODE_FAIL_NONE;
 
+        fprintf(stderr, "radius packet ok function");
 	/*
 	 *	Check for packets smaller than the packet header.
 	 *
