@@ -796,7 +796,7 @@ static int dual_tcp_recv(rad_listen_t *listener)
 
 	if (listener->status != RAD_LISTEN_STATUS_KNOWN) return 0;
 
-        if (listener->proxy_protocol) {
+        if (listener->proxy_protocol && !sock->packet) {
                 // rcode = proxy_protocol_check(listener, request);
                 // if (rcode < 0) {
                 //        RDEBUG("(TCP) Closing PROXY TCP socket from client port %u", sock->other_port);
@@ -823,6 +823,7 @@ static int dual_tcp_recv(rad_listen_t *listener)
                 // proxy_header = talloc_array(sock, uint8_t, 107);
                 uint8_t proxy_header[107];
                 len = recv(listener->fd, proxy_header, 107, MSG_PEEK);
+                if (len < 9) return 0;
                 fprintf(stderr, "received data of length: %d\n", len);
 
                 // read to make sense of the header "PROXY TCP"
@@ -831,7 +832,10 @@ static int dual_tcp_recv(rad_listen_t *listener)
                     // extract the fields now
                     p = proxy_header;
                     start = proxy_header;
-                    while ((p + 1) < proxy_header + 107) {
+
+        // todo: if ctrl character isn't encountered then we need to check if we haven't received the packet completely
+        // how to differentiate icomplete packet and bad packet...
+                    while ((p + 1) < proxy_header + len) {
 		                if ((p[0] == 0x0d) && (p[1] == 0x0a)) {
 			               eol = p;
 			               fprintf(stderr, "found ctrl character within length: %d\n", eol - start);
