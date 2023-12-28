@@ -427,6 +427,9 @@ static int mod_populate_vptuple(PyObject *pPair, VALUE_PAIR *vp, bool utf8_fail_
 				PyErr_Clear();
 				return -1;
 			}
+		} else {
+			ERROR("pStr was NULL, but no python exception");
+			return -1;
 		}
 	}
 
