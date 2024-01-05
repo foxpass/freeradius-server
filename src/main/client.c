@@ -209,7 +209,7 @@ bool client_add(RADCLIENT_LIST *clients, RADCLIENT *client)
 	}
 
 	fr_ntop(buffer, sizeof(buffer), &client->ipaddr);
-	DEBUG3("Adding client %s (%s) to prefix tree %i", buffer, client->longname, client->ipaddr.prefix);
+	INFO("Adding client %s (%s) to prefix tree %i", buffer, client->longname, client->ipaddr.prefix);
 
 	/*
 	 *	If the client also defines a server, do that now.
@@ -270,7 +270,7 @@ bool client_add(RADCLIENT_LIST *clients, RADCLIENT *client)
 			return false;
 		}
 
-		DEBUG("Adding client to client list %s", section_name);
+		INFO("Adding client to client list %s", section_name);
 
 		/*
 		 *	If the client list already exists, use that.
@@ -1251,6 +1251,8 @@ RADCLIENT *client_afrom_request(RADCLIENT_LIST *clients, REQUEST *request)
 	char		**p;
 	RADCLIENT	*c;
 	char		buffer[128];
+
+
 
 	vp_cursor_t	cursor;
 	VALUE_PAIR	*vp = NULL;

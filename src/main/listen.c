@@ -134,6 +134,10 @@ RADCLIENT *client_listener_find(rad_listen_t *listener,
         struct sockaddr_storage dst;
         socklen_t               sizeof_dst = sizeof(dst);
 #endif
+    char buffer[256];
+    ip_ntoh(ipaddr, buffer, sizeof(buffer));
+    fprintf(stderr, "client_listener_find: ip - %s\n", buffer);
+
 	time_t now;
 	RADCLIENT *client;
 	RADCLIENT_LIST *clients;
@@ -387,14 +391,10 @@ RADCLIENT *client_listener_find(rad_listen_t *listener,
 		 */
 		if (!client_add_dynamic(clients, client, created)) goto unknown;
 	}
-
 	request->server = client->server;
 	exec_trigger(request, NULL, "server.client.add", false);
-
 	talloc_free(request);
-
 	if (!created) goto unknown;
-
 	return created;
 #endif
 }
@@ -730,7 +730,8 @@ static int proxy_protocol_check(rad_listen_t *listener, REQUEST *request)
                 RDEBUG("(TLS) Unknown client %s - dropping PROXY protocol connection", argv[0]);
                 return -1;
         }
-
+        // client_listener_find -> client_find (client.c) ->
+        //                      -> client_add_dynamic (client.c) -> client_add (client.c)
         /*
          *      Use the client indicated by the proxy.
          */
@@ -776,6 +777,11 @@ static int dual_tcp_recv(rad_listen_t *listener)
 	listen_socket_t *sock = listener->data;
 	RADCLIENT	*client = sock->client;
 	REQUEST		*request = sock->request;
+
+	char buffer[256];
+
+	ip_ntoh(&client->ipaddr, buffer, sizeof(buffer));
+	fprintf(stderr, "client ip: %s\n", buffer);
 
 	char *eos;
     unsigned long num;
@@ -935,6 +941,12 @@ static int dual_tcp_recv(rad_listen_t *listener)
 		   sock->packet->dst_ipaddr = sock->my_ipaddr;
 		   sock->packet->dst_port = sock->my_port;
 		   sock->packet->proto = sock->proto;
+
+		   if ((client = client_listener_find(listener, &src, src_port)) == NULL) {
+		          RDEBUG("Unknown client dropping TCP connection");
+		          return -1;
+           }
+           sock->client = client;
 
 		} else {
 		   sock->packet->src_ipaddr = sock->other_ipaddr;
@@ -1306,6 +1318,9 @@ static int dual_tcp_accept(rad_listen_t *listener)
 		DEBUG2(" ... unknown address family");
 		return 0;
 	}
+
+	char buffer[128];
+	fprintf(stderr, "client ip: %s", inet_ntop(src_ipaddr.af, &(src_ipaddr.ipaddr), buffer, sizeof(buffer)));
 
 	/*
 	 *	Enforce client IP address checks on accept, not on

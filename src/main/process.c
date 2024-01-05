@@ -801,7 +801,7 @@ static void request_done(REQUEST *request, int original)
 #endif
 
 #ifdef DEBUG_STATE_MACHINE
-		if (rad_debug_lvl) printf("(%u) ********\tSTATE %s C-%s -> C-%s\t********\n",
+		if (true) printf("(%u) ********\tSTATE %s C-%s -> C-%s\t********\n",
 				       request->number, __FUNCTION__,
 				       child_state_names[request->child_state],
 				       child_state_names[REQUEST_DONE]);
@@ -1603,6 +1603,8 @@ static void request_finish(REQUEST *request, int action)
 	/*
 	 *	Send the reply.
 	 */
+    char buffer[256];
+
 	if ((request->response_delay.tv_sec == 0) &&
 	    (request->response_delay.tv_usec == 0)) {
 
@@ -1623,7 +1625,9 @@ static void request_finish(REQUEST *request, int action)
 		}
 
 	done:
-		RDEBUG2("Finished request");
+	    ip_ntoh(&(request->client->ipaddr), buffer, sizeof(buffer));
+		RDEBUG2("Finished request for client: %s", buffer);
+
 		request_cleanup_delay_init(request);
 
 	} else {
