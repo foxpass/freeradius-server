@@ -2708,6 +2708,9 @@ static ocsp_status_t ocsp_check(REQUEST *request, X509_STORE *store, X509 *issue
 
 	RDEBUG2("ocsp: Using responder URL \"http://%s:%s%s\"", host, port, path);
 
+	X509_VERIFY_PARAM *param = X509_STORE_get0_param(store);
+	X509_VERIFY_PARAM_clear_flags(param, X509_V_FLAG_CRL_CHECK | X509_V_FLAG_CRL_CHECK_ALL);
+
 	/* Check host and port length are sane, then create Host: HTTP header */
 	if ((strlen(host) + strlen(port) + 2) > sizeof(hostheader)) {
 		RWDEBUG("(TLS) ocsp: Host and port too long");
