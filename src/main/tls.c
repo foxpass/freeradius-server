@@ -2708,6 +2708,12 @@ static ocsp_status_t ocsp_check(REQUEST *request, X509_STORE *store, X509 *issue
 
 	RDEBUG2("ocsp: Using responder URL \"http://%s:%s%s\"", host, port, path);
 
+	/* The underlying openssl library function: OCSP_response_get1_basic failure due to CRL checks fails the OCSP operation even though CRL checks are not needed in this flow. Disable CRL checks in this flow. */
+	/* ref: https://docs.openssl.org/3.4/man3/X509_STORE_get0_param/#synopsis */
+	X509_VERIFY_PARAM *param = X509_STORE_get0_param(store);
+        if (param != NULL) {
+		X509_VERIFY_PARAM_clear_flags(param, X509_V_FLAG_CRL_CHECK | X509_V_FLAG_CRL_CHECK_ALL);
+	}
 	/* Check host and port length are sane, then create Host: HTTP header */
 	if ((strlen(host) + strlen(port) + 2) > sizeof(hostheader)) {
 		RWDEBUG("(TLS) ocsp: Host and port too long");
