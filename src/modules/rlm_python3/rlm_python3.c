@@ -410,11 +410,33 @@ static int mod_populate_vptuple(PyObject *pPair, VALUE_PAIR *vp)
 	pStr = PyUnicode_FromString(buf);
 
 	if (pStr == NULL) {
-		ERROR("%s:%d, vp->da->name: %s", __func__, __LINE__, vp->da->name);
 		if (PyErr_Occurred()) {
-			python_error_log();
+			if (PyErr_ExceptionMatches(PyExc_UnicodeDecodeError)) {
+				PyErr_Clear();
+				DEBUG("Conversion to Unicode failed, returning %s as bytes", vp->da->name);
+				pStr = PyBytes_FromString(buf);
+				if (pStr == NULL) {
+					ERROR("%s:%d, vp->da->name: %s", __func__, __LINE__, vp->da->name);
+					/* Did we get another exception while handling the UnicodeDecodeError? */
+					if (PyErr_Occurred()) {
+						python_error_log();
+						PyErr_Clear();
+					} else {
+						ERROR("%s:%d - PyBytes_FromString returned NULL but didn't throw an exception", __func__, __LINE__);
+					}
+					return -1;
+				}
+			/* Exception was not UnicodeDecodeError */
+			} else {
+				ERROR("%s:%d, vp->da->name: %s", __func__, __LINE__, vp->da->name);
+				python_error_log();
+				PyErr_Clear();
+				return -1;
+			}
+		} else {
+			ERROR("%s:%d - PyUnicode_FromString returned NULL but didn't throw an exception", __func__, __LINE__);
+			return -1;
 		}
-		return -1;
 	}
 
 	PyTuple_SET_ITEM(pPair, 1, pStr);
@@ -452,18 +474,25 @@ static bool mod_populate_vps(PyObject* pArgs, const int pos, VALUE_PAIR *vps)
 	for (vp = fr_cursor_init(&cursor, &vps); vp; vp = fr_cursor_next(&cursor))
 		tuplelen++;
 
-	if ((vps_tuple = PyTuple_New(tuplelen)) == NULL) goto error;
+	if ((vps_tuple = PyTuple_New(tuplelen)) == NULL) {
+		ERROR("%s:%d - Memory cannot be allocated for PyTyple_New", __func__, __LINE__);
+		goto error;
+	}
 
 	for (vp = fr_cursor_init(&cursor, &vps); vp; vp = fr_cursor_next(&cursor), i++) {
 		PyObject *pPair = NULL;
 
 		/* The inside tuple has two only: */
-		if ((pPair = PyTuple_New(2)) == NULL) goto error;
+		if ((pPair = PyTuple_New(2)) == NULL) {
+			ERROR("%s:%d - Memory cannot be allocated for PyTyple_New", __func__, __LINE__);
+			goto error;
+		}
 
 		if (mod_populate_vptuple(pPair, vp) == 0) {
 			/* Put the tuple inside the container */
 			PyTuple_SET_ITEM(vps_tuple, i, pPair);
 		} else {
+			ERROR("%s:%d - mod_populate_vptuple failed", __func__, __LINE__);
 			Py_DECREF(pPair);
 			goto error;
 		}
@@ -1426,7 +1455,7 @@ extern module_t rlm_python3;
 module_t rlm_python3 = {
 	.magic		= RLM_MODULE_INIT,
 	.name		= "python3",
-	.type		= RLM_TYPE_THREAD_UNSAFE,
+	.type		= RLM_TYPE_THREAD_SAFE,
 	.inst_size	= sizeof(rlm_python_t),
 	.config		= module_config,
 	.instantiate	= mod_instantiate,
