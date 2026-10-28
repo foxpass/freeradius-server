@@ -625,6 +625,8 @@ ATTRIBUTE	TLS-Server-Name-Indication		1951	string
 
 ATTRIBUTE	TLS-Cert-CRL-Distribution-Points	1960	string
 ATTRIBUTE	TLS-Client-Cert-CRL-Distribution-Points	1961	string
+ATTRIBUTE	TLS-Cert-SHA256-Fingerprint		1962	string
+ATTRIBUTE	TLS-Client-Cert-SHA256-Fingerprint	1963	string
 
 #
 #	Range:	1960-2099
