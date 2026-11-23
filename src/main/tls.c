@@ -2843,7 +2843,7 @@ ocsp_end:
 /*
  *	For creating certificate attributes.
  */
-static char const *cert_attr_names[11][2] = {
+static char const *cert_attr_names[12][2] = {
 	{ "TLS-Client-Cert-Serial",			"TLS-Cert-Serial" },
 	{ "TLS-Client-Cert-Expiration",			"TLS-Cert-Expiration" },
 	{ "TLS-Client-Cert-Subject",			"TLS-Cert-Subject" },
@@ -2855,6 +2855,7 @@ static char const *cert_attr_names[11][2] = {
 	{ "TLS-Client-Cert-Valid-Since",		"TLS-Cert-Valid-Since" },
 	{ "TLS-Client-Cert-Subject-Alt-Name-Uri",	"TLS-Cert-Subject-Alt-Name-Uri" },
 	{ "TLS-Client-Cert-CRL-Distribution-Points",	"TLS-Cert-CRL-Distribution-Points"},
+	{ "TLS-Client-Cert-SHA256-Fingerprint",		"TLS-Cert-SHA256-Fingerprint" },
 };
 
 #define FR_TLS_SERIAL		(0)
@@ -2868,6 +2869,7 @@ static char const *cert_attr_names[11][2] = {
 #define FR_TLS_VALID_SINCE	(8)
 #define FR_TLS_SAN_URI		(9)
 #define FR_TLS_CDP		(10)
+#define FR_TLS_SHA256_FINGERPRINT	(11)
 
 /*
  *	Extract Certification Distribution point URL from the certificate
@@ -3030,6 +3032,24 @@ int cbtls_verify(int ok, X509_STORE_CTX *ctx)
 		}
 		vp = fr_pair_make(talloc_ctx, certs, cert_attr_names[FR_TLS_SERIAL][lookup], buf, T_OP_SET);
 		rdebug_pair(L_DBG_LVL_2, request, vp, NULL);
+	}
+
+	/*
+	 *	Get the SHA-256 fingerprint of the whole certificate.  Unlike
+	 *	the serial, subject etc. this can't be copied into another
+	 *	certificate, so it identifies exactly which CA signed the
+	 *	client certificate.
+	 */
+	if (certs && (lookup <= 1)) {
+		uint8_t		digest[EVP_MAX_MD_SIZE];
+		unsigned int	digest_len;
+		char		fingerprint[(EVP_MAX_MD_SIZE * 2) + 1];
+
+		if (X509_digest(client_cert, EVP_sha256(), digest, &digest_len)) {
+			fr_bin2hex(fingerprint, digest, digest_len);
+			vp = fr_pair_make(talloc_ctx, certs, cert_attr_names[FR_TLS_SHA256_FINGERPRINT][lookup], fingerprint, T_OP_SET);
+			rdebug_pair(L_DBG_LVL_2, request, vp, NULL);
+		}
 	}
 
 	/*
